@@ -1,0 +1,13 @@
+FILES = main.zig
+OUT = grit
+FLAGS = -O ReleaseFast
+
+clean {
+  rm -f {OUT}
+}
+
+build {
+  :clean
+  zig build-exe {FILES} -femit-bin={OUT} {FLAGS}
+}
+
