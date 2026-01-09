@@ -1,13 +1,13 @@
-FILES = main.zig
-OUT = grit
-FLAGS = -O ReleaseFast
+FILES = 'main.zig' aaaa
+OUT = "grit"
+FLAGS = "-O ReleaseFast"
 
+#clean rule
 clean {
-  rm -f {OUT}
+  "rm -f ${OUT}"
 }
 
 build {
   :clean
-  zig build-exe {FILES} -femit-bin={OUT} {FLAGS}
+  "zig build-exe {FILES} -femit-bin={OUT} {FLAGS}"
 }
-

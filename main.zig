@@ -21,16 +21,12 @@ pub fn main() !void {
     const data = try util.read_file(args.input_file orelse "build.grit", allocator);
     defer allocator.free(data);
 
-    var lx = lexer.Lexer {
-        .src = data,
-        .index = 0,
-        .start_index = 0
-    };
+    var lx = lexer.Lexer{ .src = data, .index = 0, .start_index = 0 };
 
     while (true) {
         const tok = try lexer.lexer_advance(&lx);
 
-        std.debug.print("{s}: {s}\n", .{@tagName(tok.type), tok.str});
+        std.debug.print("{s}: {s}\n", .{ @tagName(tok.type), tok.str });
 
         if (tok.type == .TOK_EOF) {
             break;
