@@ -9,7 +9,8 @@ pub fn read_file(path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
     defer file.close();
 
     const stat = try file.stat();
-    if (stat.size == 0) return &[_]u8{};
+    if (stat.size == 0)
+        return try allocator.alloc(u8, 0);
 
     return try file.readToEndAlloc(allocator, stat.size);
 }

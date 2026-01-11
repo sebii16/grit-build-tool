@@ -2,6 +2,7 @@ FILES = "main.zig"
 OUT = "grit"
 FLAGS = "-O ReleaseFast"
 
+# this comment should get ignored by the parser
 clean {
   "rm -f ${OUT}"
 }

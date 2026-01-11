@@ -6,12 +6,13 @@ pub const ver_msg =
 
 pub const help_msg =
     \\usage:
-    \\ grit <rule> [-v] [-d]
+    \\ grit <rule> [-v] [-d] [-t<N>]
     \\ grit <option>
     \\
     \\options: 
-    \\ -d            makes a dry run - prints the build command without executing it
-    \\ -v            enables verbose output
-    \\ -h, --help    prints this help message
-    \\ --version     prints the version
+    \\ -d            dry run: test a rule without executing it
+    \\ -v            enable verbose output
+    \\ -t<N>         use N threads
+    \\ -h, --help    print this help message
+    \\ --version     print version and license notice
 ;

@@ -43,7 +43,7 @@ pub const Parser = struct {
 
             if (self.curr.type == .TOK_EOF) break;
 
-            if (self.curr.type == .TOK_NL) continue;
+            if (self.curr.type == .TOK_NL or self.curr.type == .TOK_COMMENT) continue;
 
             const name = try self.expect_and_consume(.TOK_IDENT);
 

@@ -78,12 +78,22 @@ fn handle_comments(lx: *Lexer) Token {
 }
 
 fn handle_strings(lx: *Lexer) !Token {
-    const q = lx.src[lx.start_index]; // get opening quote (' or ")
+    // get which kind of quote opened the string (' or ")
+    const q = lx.src[lx.start_index];
+
+    // move inside the string (over the quote)
+    lx.start_index = lx.index;
 
     while (advance(lx)) |c| {
         if (c == '\n') break;
 
-        if (c == q) return make_token(.TOK_STRING, lx);
+        if (c == q) {
+            // move back inside the string so tok.str wont include the quote
+            lx.index -= 1;
+            // after making the token go back to the previous index
+            defer lx.index += 1;
+            return make_token(.TOK_STRING, lx);
+        }
     }
 
     util.err.print("syntax error: unterminated string\n", .{}) catch {};
