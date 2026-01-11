@@ -1,6 +1,7 @@
 const std = @import("std");
+const util = @import("util.zig");
 
-const TokenType = enum {
+pub const TokenType = enum {
     TOK_EOF,
     TOK_NL,
     TOK_EQ,
@@ -10,6 +11,7 @@ const TokenType = enum {
     TOK_COMMENT,
     TOK_STRING,
     TOK_IDENT,
+    TOK__INVALID,
 };
 
 pub const Token = struct {
@@ -19,21 +21,44 @@ pub const Token = struct {
 
 pub const Lexer = struct {
     src: []const u8,
-    start_index: usize,
-    index: usize,
+    start_index: usize = 0,
+    index: usize = 0,
+
+    pub fn next(self: *Lexer) !Token {
+        while (true) {
+            self.start_index = self.index;
+
+            const c = advance(self) orelse {
+                return make_token(.TOK_EOF, self);
+            };
+
+            switch (c) {
+                '\n' => return make_token(.TOK_NL, self),
+                ' ', '\t', '\r' => continue,
+                '=' => return make_token(.TOK_EQ, self),
+                '{' => return make_token(.TOK_LBRACE, self),
+                '}' => return make_token(.TOK_RBRACE, self),
+                ':' => return make_token(.TOK_COLON, self),
+                '#' => return handle_comments(self),
+                '\'', '"' => return handle_strings(self),
+                else => {
+                    if (std.ascii.isAlphanumeric(c) or c == '_') {
+                        return handle_idents(self);
+                    } else {
+                        util.err.print("syntax error: unexpected character: {c}\n", .{c}) catch {};
+                        return error.UnexpectedCharacter;
+                    }
+                },
+            }
+        }
+    }
 };
 
-fn peek(lx: *Lexer) ?u8 {
+fn advance(lx: *Lexer) ?u8 {
     if (lx.index >= lx.src.len) return null;
+    defer lx.index += 1;
 
     return lx.src[lx.index];
-}
-
-fn advance(lx: *Lexer) ?u8 {
-    const c = peek(lx) orelse return null;
-    lx.index += 1;
-
-    return c;
 }
 
 fn make_token(tt: TokenType, lx: *Lexer) Token {
@@ -42,7 +67,12 @@ fn make_token(tt: TokenType, lx: *Lexer) Token {
 
 fn handle_comments(lx: *Lexer) Token {
     lx.start_index += 1; // move past #
-    while (advance(lx)) |c| if (c == '\n') break;
+    while (advance(lx)) |c| {
+        if (c == '\n') {
+            lx.index -= 1;
+            break;
+        }
+    }
 
     return make_token(.TOK_COMMENT, lx);
 }
@@ -50,51 +80,23 @@ fn handle_comments(lx: *Lexer) Token {
 fn handle_strings(lx: *Lexer) !Token {
     const q = lx.src[lx.start_index]; // get opening quote (' or ")
 
-    while (true) {
-        const c = advance(lx) orelse return error.UnexpectedEOF;
+    while (advance(lx)) |c| {
+        if (c == '\n') break;
 
-        if (c == '\n') return error.UnterminatedString;
-
-        if (c == q) break;
+        if (c == q) return make_token(.TOK_STRING, lx);
     }
 
-    return make_token(.TOK_STRING, lx);
+    util.err.print("syntax error: unterminated string\n", .{}) catch {};
+    return error.UnterminatedString;
 }
 
 fn handle_idents(lx: *Lexer) Token {
-    while (peek(lx)) |c| {
-        if (!std.ascii.isAlphanumeric(c) and c != '_') break;
-
-        _ = advance(lx);
+    while (advance(lx)) |c| {
+        if (!std.ascii.isAlphanumeric(c) and c != '_') {
+            lx.index -= 1;
+            break;
+        }
     }
 
     return make_token(.TOK_IDENT, lx);
-}
-
-pub fn lexer_advance(lx: *Lexer) !Token {
-    while (true) {
-        lx.start_index = lx.index;
-
-        const c = advance(lx) orelse {
-            return make_token(.TOK_EOF, lx);
-        };
-
-        switch (c) {
-            '\n' => return make_token(.TOK_NL, lx),
-            ' ', '\t', '\r' => continue,
-            '=' => return make_token(.TOK_EQ, lx),
-            '{' => return make_token(.TOK_LBRACE, lx),
-            '}' => return make_token(.TOK_RBRACE, lx),
-            ':' => return make_token(.TOK_COLON, lx),
-            '#' => return handle_comments(lx),
-            '\'', '"' => return handle_strings(lx),
-            else => {
-                if (std.ascii.isAlphanumeric(c) or c == '_') {
-                    return handle_idents(lx);
-                } else {
-                    return error.UnexpectedCharacter;
-                }
-            },
-        }
-    }
 }

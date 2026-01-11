@@ -1,35 +1,68 @@
 const std = @import("std");
 const util = @import("util.zig");
 const lexer = @import("lexer.zig");
+const cli = @import("cli.zig");
+const g = @import("globals.zig");
+const parser = @import("parser.zig");
+const builtin = @import("builtin");
 
 pub fn main() !void {
-    const args = try util.handle_args();
+    const args = cli.handle_args() catch {
+        return;
+    };
 
-    if ((args.flags & util.Flags.verbose) != 0) {
-        std.debug.print("verbose mode\n", .{});
-    }
+    switch (args.action) {
+        .Help => {
+            try util.out.print("{s}\n", .{g.help_msg});
+            return;
+        },
+        .Version => {
+            try util.out.print("{s}\n", .{g.ver_msg});
+            return;
+        },
+        .Run => {
+            var gpa = std.heap.DebugAllocator(.{}){};
+            defer {
+                const check = gpa.deinit();
+                if (check == .leak) @panic("memory leak");
+            }
+            const allocator = gpa.allocator();
 
-    if ((args.flags & util.Flags.help) != 0) {
-        std.debug.print("print help\n", .{});
-    }
+            const src = util.read_file("build.grit", allocator) catch {
+                try util.err.print("error: failed to read 'build.grit\n", .{});
+                return;
+            };
+            defer allocator.free(src);
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+            var prs = parser.Parser{ .lexer = lexer.Lexer{ .src = src }, .allocator = allocator };
+            const ast: []parser.Ast = prs.parse_all() catch return;
 
-    const allocator = gpa.allocator();
+            if (builtin.mode == .Debug) {
+                for (ast) |n| {
+                    switch (n) {
+                        .VAR => |v| {
+                            std.debug.print("{s} = {s}\n", .{ v.name, v.value });
+                        },
+                        .RULE => |r| {
+                            std.debug.print("{s}:\n", .{r.name});
+                            for (r.cmds) |cmd| {
+                                std.debug.print("  {s}\n", .{cmd});
+                            }
+                        },
+                    }
+                }
+            }
 
-    const data = try util.read_file(args.input_file orelse "build.grit", allocator);
-    defer allocator.free(data);
+            for (ast) |n| {
+                switch (n) {
+                    .RULE => |r| {
+                        allocator.free(r.cmds);
+                    },
+                    else => {},
+                }
+            }
 
-    var lx = lexer.Lexer{ .src = data, .index = 0, .start_index = 0 };
-
-    while (true) {
-        const tok = try lexer.lexer_advance(&lx);
-
-        std.debug.print("{s}: {s}\n", .{ @tagName(tok.type), tok.str });
-
-        if (tok.type == .TOK_EOF) {
-            break;
-        }
+            allocator.free(ast);
+        },
     }
 }
