@@ -4,10 +4,10 @@ FLAGS = "-O ReleaseFast"
 
 # this comment should get ignored by the parser
 clean {
-  "rm -f ${OUT}"
+  "rm -f $OUT"
 }
 
 build {
-  "zig build-exe {FILES} -femit-bin={OUT} {FLAGS}"
+  "zig build-exe $FILES -femit-bin=$OUT $FLAGS"
 }
 

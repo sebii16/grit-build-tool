@@ -13,13 +13,13 @@ const Rule = struct {
 };
 
 pub const Ast = union(enum) {
-    VAR: Var,
-    RULE: Rule,
+    VarDecl: Var,
+    RuleDecl: Rule,
 
     pub fn cleanup(self: Ast, allocator: std.mem.Allocator) void {
         switch (self) {
-            .RULE => |r| allocator.free(r.cmds),
-            .VAR => {},
+            .RuleDecl => |r| allocator.free(r.cmds),
+            .VarDecl => {},
         }
     }
 };
@@ -36,6 +36,8 @@ pub const Parser = struct {
                 n.cleanup(self.allocator);
             }
             nodes.deinit(self.allocator);
+
+            util.print_dbg("cleaned up ast", .{});
         }
 
         while (true) {
@@ -52,7 +54,7 @@ pub const Parser = struct {
                     try self.next_token();
                     const value = try self.expect_and_consume(.TOK_STRING);
 
-                    try nodes.append(self.allocator, Ast{ .VAR = .{ .name = name.str, .value = value.str } });
+                    try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name.str, .value = value.str } });
                 },
                 .TOK_LBRACE => {
                     var cmds: std.ArrayList([]const u8) = .empty;
@@ -66,7 +68,7 @@ pub const Parser = struct {
                         if (self.curr.type == .TOK_NL) continue;
 
                         if (self.curr.type == .TOK_EOF) {
-                            std.debug.print("syntax error: expected '}}' got 'EOF'\n", .{});
+                            util.print_err("expected '}}' got 'EOF'", .{});
                             return error.SyntaxError;
                         }
 
@@ -74,11 +76,11 @@ pub const Parser = struct {
                         try cmds.append(self.allocator, cmd.str);
                     }
                     // add all commands and the rule name to the arraylist
-                    try nodes.append(self.allocator, Ast{ .RULE = .{ .name = name.str, .cmds = try cmds.toOwnedSlice(self.allocator) } });
+                    try nodes.append(self.allocator, Ast{ .RuleDecl = .{ .name = name.str, .cmds = try cmds.toOwnedSlice(self.allocator) } });
                 },
                 else => {
-                    std.debug.print(
-                        "syntax error: expected '=' or '{{', got {s}\n",
+                    util.print_err(
+                        "expected '=' or '{{', got {s}",
                         .{@tagName(self.curr.type)},
                     );
                     return error.SyntaxError;
@@ -95,10 +97,10 @@ pub const Parser = struct {
 
     fn expect_and_consume(self: *Parser, t: lexer.TokenType) !lexer.Token {
         if (self.curr.type != t) {
-            util.err.print(
-                "syntax error: expected {s}, got {s}\n",
+            util.print_err(
+                "expected {s}, got {s}",
                 .{ @tagName(t), @tagName(self.curr.type) },
-            ) catch {};
+            );
             return error.SyntaxError;
         }
 

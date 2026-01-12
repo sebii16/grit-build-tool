@@ -1,5 +1,7 @@
+pub const default_build_file = "build.grit";
+
 pub const ver_msg =
-    \\grit 0.0.1
+    \\grit 0.0.5
     \\Copyright (c) 2026 sebii16
     \\Licensed under the MIT License - see LICENSE for more info
 ;
