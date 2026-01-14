@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const out = std.fs.File.stdout().deprecatedWriter();
+pub const out = std.fs.File.stdout().deprecatedWriter();
 const err = std.fs.File.stderr().deprecatedWriter();
 
 pub fn read_file(comptime path: []const u8, allocator: std.mem.Allocator) ![]u8 {
@@ -8,7 +8,7 @@ pub fn read_file(comptime path: []const u8, allocator: std.mem.Allocator) ![]u8 
     defer file.close();
 
     return file.readToEndAlloc(allocator, std.math.maxInt(usize)) catch {
-        print_err("failed to read 'build.grit", .{});
+        print_err("failed to read 'build.grit.", .{});
         return error.ReadFile;
     };
 }

@@ -2,6 +2,8 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const util = @import("util.zig");
 
+// TODO: add line tracking
+
 const Var = struct {
     name: []const u8,
     value: []const u8,
@@ -37,7 +39,7 @@ pub const Parser = struct {
             }
             nodes.deinit(self.allocator);
 
-            util.print_dbg("cleaned up ast", .{});
+            util.print_dbg("freed ast", .{});
         }
 
         while (true) {
@@ -65,10 +67,10 @@ pub const Parser = struct {
 
                         if (self.curr.type == .TOK_RBRACE) break;
 
-                        if (self.curr.type == .TOK_NL) continue;
+                        if (self.curr.type == .TOK_NL or self.curr.type == .TOK_COMMENT) continue;
 
                         if (self.curr.type == .TOK_EOF) {
-                            util.print_err("expected '}}' got 'EOF'", .{});
+                            util.print_err("expected '}}' got 'EOF'.", .{});
                             return error.SyntaxError;
                         }
 
@@ -80,7 +82,7 @@ pub const Parser = struct {
                 },
                 else => {
                     util.print_err(
-                        "expected '=' or '{{', got {s}",
+                        "expected '=' or '{{', got {s}.",
                         .{@tagName(self.curr.type)},
                     );
                     return error.SyntaxError;
@@ -98,7 +100,7 @@ pub const Parser = struct {
     fn expect_and_consume(self: *Parser, t: lexer.TokenType) !lexer.Token {
         if (self.curr.type != t) {
             util.print_err(
-                "expected {s}, got {s}",
+                "expected {s}, got {s}.",
                 .{ @tagName(t), @tagName(self.curr.type) },
             );
             return error.SyntaxError;

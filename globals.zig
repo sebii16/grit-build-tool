@@ -3,7 +3,7 @@ pub const default_build_file = "build.grit";
 pub const ver_msg =
     \\grit 0.0.5
     \\Copyright (c) 2026 sebii16
-    \\Licensed under the MIT License - see LICENSE for more info
+    \\Licensed under the MIT License - see LICENSE for more info.
 ;
 
 pub const help_msg =
@@ -12,9 +12,9 @@ pub const help_msg =
     \\ grit <option>
     \\
     \\options: 
-    \\ -d            dry run: test a rule without executing it
-    \\ -v            enable verbose output
-    \\ -t<N>         use N threads
-    \\ -h, --help    print this help message
-    \\ --version     print version and license notice
+    \\ -d            dry run: test a rule without executing it.
+    \\ -v            enable verbose output.
+    \\ -t<N>         use N threads.
+    \\ -h, --help    print this help message.
+    \\ --version     print version and license notice.
 ;

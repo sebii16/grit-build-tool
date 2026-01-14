@@ -8,9 +8,7 @@ const builtin = @import("builtin");
 const runner = @import("runner.zig");
 
 pub fn main() !void {
-    const args = cli.handle_args() catch {
-        return;
-    };
+    const args = cli.handle_args() catch return;
 
     switch (args.action) {
         .Help => {
@@ -25,7 +23,7 @@ pub fn main() !void {
             var gpa = std.heap.DebugAllocator(.{}){};
             defer {
                 const check = gpa.deinit();
-                if (check == .leak) @panic("memory leak");
+                if (check == .leak) @panic("memory leaked");
             }
             const allocator = gpa.allocator();
 
@@ -48,7 +46,7 @@ pub fn main() !void {
                 allocator.free(ast);
             }
 
-            runner.run_build_rule(args.rule, &ast, args.flags.threads) catch return;
+            runner.run_build_rule(args.rule, ast, args, allocator) catch return;
         },
     }
 }

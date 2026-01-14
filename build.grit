@@ -8,6 +8,11 @@ clean {
 }
 
 build {
-  "zig build-exe $FILES -femit-bin=$OUT $FLAGS"
+ "zig build-exe $FILES -femit-bin=$OUT $FLAGS"
 }
 
+test {
+  "test $OUT$$$$"
+  #test
+  "test \$FILES"
+}
