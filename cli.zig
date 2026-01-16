@@ -1,5 +1,6 @@
 const std = @import("std");
-const util = @import("util.zig");
+const globals = @import("globals.zig");
+const logger = @import("logger.zig");
 
 pub const Flags = struct {
     verbose: bool = false,
@@ -40,7 +41,7 @@ pub fn handle_args() !Args {
         res.rule = first;
         while (args.next()) |arg| {
             if (arg.len < 2 or arg[0] != '-') {
-                util.print_err("invalid flag: '{s}'.", .{arg});
+                logger.out(.err, null, "invalid flag: '{s}'.", .{arg});
                 return error.InvalidArgument;
             }
             for (arg[1..], 1..) |c, i| {
@@ -49,25 +50,26 @@ pub fn handle_args() !Args {
                     'd' => res.flags.dry_run = true,
                     't' => {
                         if (i + 1 >= arg.len) {
-                            util.print_err("missing value for '-t'.", .{});
+                            logger.out(.err, null, "missing value for '-t'.", .{});
                             return error.InvalidArgument;
                         }
 
                         const num_str = arg[i + 1 ..];
-                        res.flags.threads = std.fmt.parseInt(u8, num_str, 10) catch |e| switch (e) {
-                            error.InvalidCharacter => {
-                                util.print_err("value '{s}' isn't a number.", .{num_str});
-                                return error.InvalidCharacter;
-                            },
-                            error.Overflow => {
-                                util.print_err("value '{s}' is too big. (>{})", .{ num_str, std.math.maxInt(u8) });
-                                return error.Overflow;
-                            },
+                        res.flags.threads = std.fmt.parseInt(u8, num_str, 10) catch |e| {
+                            switch (e) {
+                                error.InvalidCharacter => {
+                                    logger.out(.err, null, "value '{s}' isn't a number.", .{num_str});
+                                },
+                                error.Overflow => {
+                                    logger.out(.err, null, "value '{s}' is too big. Max size is {}.", .{ num_str, std.math.maxInt(u8) });
+                                },
+                            }
+                            return e;
                         };
                         break;
                     },
                     else => {
-                        util.print_err("invalid flag: '{s}'.", .{arg});
+                        logger.out(.err, null, "invalid flag: '{s}'.", .{arg});
                         return error.InvalidArgument;
                     },
                 }

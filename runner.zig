@@ -1,6 +1,6 @@
 const std = @import("std");
 const parser = @import("parser.zig");
-const util = @import("util.zig");
+const logger = @import("logger.zig");
 const cli = @import("cli.zig");
 
 fn lookup_value(ast: []const parser.Ast, name: []const u8) ?[]const u8 {
@@ -50,11 +50,11 @@ fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Al
 
             const value = lookup_value(ast, input[start..end]) orelse {
                 const middle = start + (end - start) / 2;
-                util.print_err("{s}", .{input});
-                for (0..middle + 7) |_| {
-                    try util.out.writeByte(' ');
+                logger.out(.syntax, null, "{s}", .{input});
+                for (0..middle + 14) |_| {
+                    try logger.stdout.writeByte(' ');
                 }
-                util.print("^ variable undefined.", .{});
+                logger.out(.info, null, "^ variable undefined.", .{});
                 return error.InvalidVar;
             };
 
@@ -73,7 +73,7 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
     if (threads == 0) {
         threads = res: {
             const cpus = std.Thread.getCpuCount() catch {
-                util.print_warn("failed to get CPU count; defaulting to 1. Use -t<N> to override.", .{});
+                logger.out(.warning, null, "failed to get CPU count; defaulting to 1. Use -t<N> to override.", .{});
                 break :res 1;
             };
             const cpus_u8 = @min(cpus, @as(usize, std.math.maxInt(u8)));
@@ -81,7 +81,7 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
         };
     }
 
-    util.print_dbg("threads: {d}, dry run: {}, verbose output: {}.", .{ threads, args.flags.dry_run, args.flags.verbose });
+    logger.out(.debug, null, "threads: {d}, dry run: {}, verbose output: {}.", .{ threads, args.flags.dry_run, args.flags.verbose });
 
     for (ast) |node| {
         switch (node) {
@@ -90,20 +90,23 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
                     if (r.cmds.len > 0) {
                         for (r.cmds) |cmd| {
                             const expanded = try expand_vars(cmd, ast, allocator);
-                            defer allocator.free(expanded);
+                            defer {
+                                logger.out(.debug, null, "cleaning up expanded cmd", .{});
+                                allocator.free(expanded);
+                            }
 
-                            util.print_dbg("{s} -> {s}", .{ cmd, expanded });
+                            logger.out(.debug, null, "{s} -> {s}", .{ cmd, expanded });
                         }
                         return;
                     }
-                    util.print_err("build rule '{s}' is empty.", .{r.name});
-                    return error.EmptyRule;
+                    logger.out(.warning, null, "build rule '{s}' is empty.", .{r.name});
+                    return;
                 }
             },
             else => {},
         }
     }
 
-    util.print_err("build rule '{s}' doesn't exist.", .{rule});
+    logger.out(.err, null, "build rule '{s}' doesn't exist.", .{rule});
     return error.InvalidRule;
 }

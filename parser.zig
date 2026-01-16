@@ -1,6 +1,7 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
-const util = @import("util.zig");
+const globals = @import("globals.zig");
+const logger = @import("logger.zig");
 
 // TODO: add line tracking
 
@@ -28,7 +29,7 @@ pub const Ast = union(enum) {
 
 pub const Parser = struct {
     lexer: lexer.Lexer,
-    curr: lexer.Token = .{ .str = &[_]u8{}, .type = .TOK__INVALID },
+    curr: lexer.Token = .{ .value = &[_]u8{}, .type = .TOK__INVALID },
     allocator: std.mem.Allocator,
 
     pub fn parse_all(self: *Parser) ![]Ast {
@@ -39,7 +40,7 @@ pub const Parser = struct {
             }
             nodes.deinit(self.allocator);
 
-            util.print_dbg("freed ast", .{});
+            logger.out(.debug, null, "freed ast", .{});
         }
 
         while (true) {
@@ -56,7 +57,7 @@ pub const Parser = struct {
                     try self.next_token();
                     const value = try self.expect_and_consume(.TOK_STRING);
 
-                    try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name.str, .value = value.str } });
+                    try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name.value, .value = value.value } });
                 },
                 .TOK_LBRACE => {
                     var cmds: std.ArrayList([]const u8) = .empty;
@@ -70,21 +71,18 @@ pub const Parser = struct {
                         if (self.curr.type == .TOK_NL or self.curr.type == .TOK_COMMENT) continue;
 
                         if (self.curr.type == .TOK_EOF) {
-                            util.print_err("expected '}}' got 'EOF'.", .{});
+                            logger.out(.syntax, self.lexer.curr_line, "expected '}}' got 'EOF'.", .{});
                             return error.SyntaxError;
                         }
 
                         const cmd = try self.expect_and_consume(.TOK_STRING);
-                        try cmds.append(self.allocator, cmd.str);
+                        try cmds.append(self.allocator, cmd.value);
                     }
                     // add all commands and the rule name to the arraylist
-                    try nodes.append(self.allocator, Ast{ .RuleDecl = .{ .name = name.str, .cmds = try cmds.toOwnedSlice(self.allocator) } });
+                    try nodes.append(self.allocator, Ast{ .RuleDecl = .{ .name = name.value, .cmds = try cmds.toOwnedSlice(self.allocator) } });
                 },
                 else => {
-                    util.print_err(
-                        "expected '=' or '{{', got {s}.",
-                        .{@tagName(self.curr.type)},
-                    );
+                    logger.out(.syntax, self.lexer.curr_line, "expected '=' or '{{', got {s}.", .{@tagName(self.curr.type)});
                     return error.SyntaxError;
                 },
             }
@@ -99,10 +97,7 @@ pub const Parser = struct {
 
     fn expect_and_consume(self: *Parser, t: lexer.TokenType) !lexer.Token {
         if (self.curr.type != t) {
-            util.print_err(
-                "expected {s}, got {s}.",
-                .{ @tagName(t), @tagName(self.curr.type) },
-            );
+            logger.out(.syntax, self.lexer.curr_line, "expected {s}, got {s}.", .{ @tagName(t), @tagName(self.curr.type) });
             return error.SyntaxError;
         }
 

@@ -1,5 +1,6 @@
 const std = @import("std");
-const util = @import("util.zig");
+const logger = @import("logger.zig");
+const globals = @import("globals.zig");
 
 pub const TokenType = enum {
     TOK_EOF,
@@ -16,13 +17,14 @@ pub const TokenType = enum {
 
 pub const Token = struct {
     type: TokenType,
-    str: []const u8,
+    value: []const u8,
 };
 
 pub const Lexer = struct {
     src: []const u8,
     start_index: usize = 0,
     index: usize = 0,
+    curr_line: usize = 1,
 
     pub fn next(self: *Lexer) !Token {
         while (true) {
@@ -33,7 +35,10 @@ pub const Lexer = struct {
             };
 
             switch (c) {
-                '\n' => return make_token(.TOK_NL, self),
+                '\n' => {
+                    self.curr_line += 1;
+                    return make_token(.TOK_NL, self);
+                },
                 ' ', '\t', '\r' => continue,
                 '=' => return make_token(.TOK_EQ, self),
                 '{' => return make_token(.TOK_LBRACE, self),
@@ -45,7 +50,7 @@ pub const Lexer = struct {
                     if (std.ascii.isAlphanumeric(c) or c == '_') {
                         return handle_idents(self);
                     } else {
-                        util.print_err("unexpected character: {c}.", .{c});
+                        logger.out(.syntax, self.curr_line, "unexpected character: {c}.", .{c});
                         return error.UnexpectedCharacter;
                     }
                 },
@@ -62,7 +67,7 @@ fn advance(lx: *Lexer) ?u8 {
 }
 
 fn make_token(tt: TokenType, lx: *Lexer) Token {
-    return Token{ .type = tt, .str = lx.src[lx.start_index..lx.index] };
+    return Token{ .type = tt, .value = lx.src[lx.start_index..lx.index] };
 }
 
 fn handle_comments(lx: *Lexer) Token {
@@ -88,7 +93,7 @@ fn handle_strings(lx: *Lexer) !Token {
         if (c == '\n') break;
 
         if (c == q) {
-            // move back inside the string so tok.str wont include the quote
+            // move back inside the string so tok.value wont include the quote
             lx.index -= 1;
             // after making the token go back to the previous index
             defer lx.index += 1;
@@ -96,7 +101,7 @@ fn handle_strings(lx: *Lexer) !Token {
         }
     }
 
-    util.print_err("unterminated string.", .{});
+    logger.out(.syntax, lx.curr_line, "unterminated string.", .{});
     return error.UnterminatedString;
 }
 
