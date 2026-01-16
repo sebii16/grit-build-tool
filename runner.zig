@@ -3,6 +3,10 @@ const parser = @import("parser.zig");
 const logger = @import("logger.zig");
 const cli = @import("cli.zig");
 
+//
+//TODO: clean this up
+//
+
 fn lookup_variable(ast: []const parser.Ast, name: []const u8) ?[]const u8 {
     for (ast) |a| {
         switch (a) {
@@ -68,7 +72,7 @@ fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Al
     return try expanded.toOwnedSlice(allocator);
 }
 
-pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args, allocator: std.mem.Allocator) !void {
+pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.mem.Allocator, prs: parser.Parser) !void {
     // set threads to the number that might have been set by the user, if its not set (standard = 0) or set to 0 try to get cpu count
     // if that fails set it to 1 (single threaded execution) and warn the user
     var threads = args.flags.threads;
@@ -83,7 +87,14 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
         };
     }
 
-    logger.out(.debug, null, "threads: {d}, dry run: {}, verbose output: {}.", .{ threads, args.flags.dry_run, args.flags.verbose });
+    const rule = args.rule orelse prs.default_rule orelse {
+        logger.out(.err, null, "no build rule selected", .{});
+        return error.InvalidRule;
+    };
+
+    logger.out(.debug, null, "threads: {d}, dry run: {}, verbose output: {}, selected rule: {s}", .{ threads, args.flags.dry_run, args.flags.verbose, rule });
+
+    logger.out(.info, null, "selected rule: {s}{s}{s}", .{ logger.ansi.bold, rule, logger.ansi.reset });
 
     for (ast) |node| {
         switch (node) {
@@ -93,11 +104,9 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
                         for (r.cmds) |cmd| {
                             const expanded = try expand_vars(cmd, ast, allocator);
                             defer {
-                                logger.out(.debug, null, "cleaning up expanded cmd", .{});
                                 allocator.free(expanded);
                             }
 
-                            logger.out(.debug, null, "{s} -> {s}", .{ cmd, expanded });
                             if (args.flags.dry_run) {
                                 logger.out(.info, null, "{s}generated command:{s} {s} {s}[dry run]{s}", .{ logger.ansi.bold, logger.ansi.reset, expanded, logger.ansi.bold, logger.ansi.reset });
                                 continue;
@@ -106,7 +115,7 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
                             const exit_code = execute_cmd(expanded, allocator) catch 1;
                             if (exit_code != 0) {
                                 logger.out(.err, null, "command exited with code {d}.", .{exit_code});
-                                return;
+                                return error.ExecutionError;
                             }
                         }
                         return;
@@ -119,12 +128,12 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
         }
     }
 
-    logger.out(.err, null, "build rule or option '{s}' doesn't exist.", .{rule});
+    logger.out(.err, null, "build rule {s} doesn't exist.", .{rule});
     return error.InvalidRule;
 }
 
 fn execute_cmd(cmd: []const u8, allocator: std.mem.Allocator) !u8 {
-    logger.out(.info, null, "{s}executing command:{s} {s}", .{ logger.ansi.bold, logger.ansi.reset, cmd });
+    logger.out(.info, null, "executing command: {s}{s}{s}", .{ logger.ansi.bold, cmd, logger.ansi.reset });
     var child = std.process.Child.init(&[_][]const u8{ "/bin/sh", "-c", cmd }, allocator);
 
     child.stdin_behavior = .Ignore;

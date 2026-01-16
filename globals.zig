@@ -2,7 +2,7 @@ const std = @import("std");
 const logger = @import("logger.zig");
 
 pub const default_build_file = "build.grit";
-const ver = logger.ansi.bold ++ "grit 0.0.9" ++ logger.ansi.reset;
+const ver = logger.ansi.bold ++ "grit 0.0.10" ++ logger.ansi.reset;
 
 pub const ver_msg =
     ver ++

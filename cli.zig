@@ -2,6 +2,10 @@ const std = @import("std");
 const globals = @import("globals.zig");
 const logger = @import("logger.zig");
 
+//
+//TODO: fix handle_args
+//
+
 pub const Flags = struct {
     verbose: bool = false,
     dry_run: bool = false,
@@ -15,7 +19,7 @@ pub const Actions = enum {
 };
 
 pub const Args = struct {
-    rule: []const u8 = "",
+    rule: ?[]const u8 = null,
     flags: Flags = .{},
     action: Actions = .Run,
 };
@@ -27,7 +31,6 @@ pub fn handle_args() !Args {
     _ = args.next(); // skip exe name
 
     const first = args.next() orelse {
-        res.action = .Help;
         return res;
     };
 

@@ -2,16 +2,21 @@ const std = @import("std");
 const logger = @import("logger.zig");
 const globals = @import("globals.zig");
 
+//
+//TODO: add more keywords and implement it properly this is just testing
+//
+
 pub const TokenType = enum {
     TOK_EOF,
     TOK_NL,
     TOK_EQ,
     TOK_LBRACE,
     TOK_RBRACE,
-    TOK_COLON,
+    TOK_AT,
     TOK_COMMENT,
     TOK_STRING,
     TOK_IDENT,
+    TOK_DEFAULT_KW,
     TOK__INVALID,
 };
 
@@ -43,7 +48,7 @@ pub const Lexer = struct {
                 '=' => return make_token(.TOK_EQ, self),
                 '{' => return make_token(.TOK_LBRACE, self),
                 '}' => return make_token(.TOK_RBRACE, self),
-                ':' => return make_token(.TOK_COLON, self),
+                '@' => return make_token(.TOK_AT, self),
                 '#' => return handle_comments(self),
                 '\'', '"' => return handle_strings(self),
                 else => {
@@ -110,5 +115,12 @@ fn handle_idents(lx: *Lexer) Token {
         }
     }
 
-    return make_token(.TOK_IDENT, lx);
+    return make_token(lookup_keyword(lx.src[lx.start_index..lx.index]) orelse .TOK_IDENT, lx);
+}
+
+fn lookup_keyword(ident: []const u8) ?TokenType {
+    return switch (ident.len) {
+        7 => if (std.mem.eql(u8, ident, "default")) .TOK_DEFAULT_KW else null,
+        else => null,
+    };
 }

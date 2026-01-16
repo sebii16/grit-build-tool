@@ -10,7 +10,8 @@ clean {
 }
 
 test {
-  "./$OUT"
+  @default
+  'echo "hello world"'
 }
 
 debug {

@@ -47,7 +47,7 @@ pub fn main() u8 {
                 allocator.free(ast);
             }
 
-            runner.run_build_rule(args.rule, ast, args, allocator) catch return 1;
+            runner.run_build_rule(ast, args, allocator, prs) catch return 1;
         },
     }
 

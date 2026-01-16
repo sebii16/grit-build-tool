@@ -2,8 +2,13 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const globals = @import("globals.zig");
 const logger = @import("logger.zig");
+const cli = @import("cli.zig");
 
-// TODO: add line tracking
+//
+//TODO:
+//clean this up
+//
+//
 
 const Var = struct {
     name: []const u8,
@@ -30,6 +35,7 @@ pub const Ast = union(enum) {
 pub const Parser = struct {
     lexer: lexer.Lexer,
     curr: lexer.Token = .{ .value = &[_]u8{}, .type = .TOK__INVALID },
+    default_rule: ?[]const u8 = null,
     allocator: std.mem.Allocator,
 
     pub fn parse_all(self: *Parser) ![]Ast {
@@ -40,7 +46,7 @@ pub const Parser = struct {
             }
             nodes.deinit(self.allocator);
 
-            logger.out(.debug, null, "freed ast", .{});
+            logger.out(.debug, null, "cleaning up ast", .{});
         }
 
         while (true) {
@@ -50,23 +56,12 @@ pub const Parser = struct {
 
             if (self.curr.type == .TOK_NL or self.curr.type == .TOK_COMMENT) continue;
 
-            const name = try self.expect_and_consume(.TOK_IDENT);
-
-            // needed syntax:
-            // IDENT    EQ    STRING
-            // name     =       ""
-            // or
-            // IDENT   RBRACE
-            // name     {
-            // ...
-            //  }
-            // CLOSING BRACE
-            //
+            const name = try self.expect_and_advance(.TOK_IDENT);
 
             switch (self.curr.type) {
                 .TOK_EQ => {
                     try self.next_token();
-                    const value = try self.expect_and_consume(.TOK_STRING);
+                    const value = try self.expect_and_advance(.TOK_STRING);
 
                     try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name.value, .value = value.value } });
                 },
@@ -86,14 +81,25 @@ pub const Parser = struct {
                             return error.SyntaxError;
                         }
 
-                        const cmd = try self.expect_and_consume(.TOK_STRING);
+                        if (self.curr.type == .TOK_AT) {
+                            try self.next_token();
+                            _ = try self.expect(.TOK_DEFAULT_KW);
+                            if (self.default_rule != null) {
+                                logger.out(.syntax, self.lexer.curr_line, "@default can only be used on one rule", .{});
+                                return error.DefaultRuleCalledTwice;
+                            }
+                            self.default_rule = name.value;
+                            continue;
+                        }
+
+                        const cmd = try self.expect_and_advance(.TOK_STRING);
                         try cmds.append(self.allocator, cmd.value);
                     }
                     // add all commands and the rule name to the arraylist
                     try nodes.append(self.allocator, Ast{ .RuleDecl = .{ .name = name.value, .cmds = try cmds.toOwnedSlice(self.allocator) } });
                 },
                 else => {
-                    logger.out(.syntax, self.lexer.curr_line, "expected '=' or '{{', got {s}.", .{@tagName(self.curr.type)});
+                    logger.out(.syntax, self.lexer.curr_line, "expected '=', '{{' or ':default', got {s}.", .{@tagName(self.curr.type)});
                     return error.SyntaxError;
                 },
             }
@@ -106,12 +112,15 @@ pub const Parser = struct {
         self.curr = try self.lexer.next();
     }
 
-    fn expect_and_consume(self: *Parser, t: lexer.TokenType) !lexer.Token {
+    fn expect(self: *Parser, t: lexer.TokenType) !void {
         if (self.curr.type != t) {
             logger.out(.syntax, self.lexer.curr_line, "expected {s}, got {s}.", .{ @tagName(t), @tagName(self.curr.type) });
             return error.SyntaxError;
         }
+    }
 
+    fn expect_and_advance(self: *Parser, t: lexer.TokenType) !lexer.Token {
+        self.expect(t) catch |e| return e;
         //store current token and advance one
         const tok = self.curr;
         try self.next_token();
