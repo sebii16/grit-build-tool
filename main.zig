@@ -5,6 +5,7 @@ const g = @import("globals.zig");
 const parser = @import("parser.zig");
 const runner = @import("runner.zig");
 const logger = @import("logger.zig");
+const builtin = @import("builtin");
 
 pub fn main() u8 {
     const args = cli.handle_args() catch return 1;
@@ -12,17 +13,17 @@ pub fn main() u8 {
     switch (args.action) {
         .Help => {
             logger.out(.info, null, "{s}", .{g.help_msg});
-            return 1;
+            return 0;
         },
         .Version => {
             logger.out(.info, null, "{s}", .{g.ver_msg});
-            return 1;
+            logger.out(.debug, null, "debug build", .{});
+            return 0;
         },
         .Run => {
             var gpa = std.heap.DebugAllocator(.{}){};
             defer {
-                const check = gpa.deinit();
-                if (check == .leak) @panic("memory leaked");
+                if (gpa.deinit() == .leak) @panic("memory leaked");
             }
             const allocator = gpa.allocator();
 

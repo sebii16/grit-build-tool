@@ -1,7 +1,8 @@
 const std = @import("std");
+const logger = @import("logger.zig");
 
 pub const default_build_file = "build.grit";
-const ver = "grit 0.0.7";
+const ver = logger.ansi.bold ++ "grit 0.0.9" ++ logger.ansi.reset;
 
 pub const ver_msg =
     ver ++
@@ -12,8 +13,12 @@ pub const ver_msg =
 
 pub const help_msg =
     \\usage:
+++ logger.ansi.bold ++
+    \\
     \\ grit <rule> [-v] [-d] [-t<N>]
     \\ grit <option>
+++ logger.ansi.reset ++
+    \\
     \\
     \\options: 
     \\ -d            dry run: test a rule without executing it.

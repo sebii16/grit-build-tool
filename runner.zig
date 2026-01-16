@@ -3,7 +3,7 @@ const parser = @import("parser.zig");
 const logger = @import("logger.zig");
 const cli = @import("cli.zig");
 
-fn lookup_value(ast: []const parser.Ast, name: []const u8) ?[]const u8 {
+fn lookup_variable(ast: []const parser.Ast, name: []const u8) ?[]const u8 {
     for (ast) |a| {
         switch (a) {
             .VarDecl => |v| {
@@ -28,7 +28,7 @@ fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Al
     while (i < input.len) : (i += 1) {
         const c = input[i];
 
-        // dont expand if $ has a \ infront
+        // dont expand if $ is escaped with \
         if (c == '\\' and i + 1 < input.len and input[i + 1] == '$') {
             expanded.appendAssumeCapacity('$');
             i += 1;
@@ -37,22 +37,22 @@ fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Al
 
         if (c == '$') {
             const start = i + 1;
-            // handle $ followed by syntactically invalid variable name
-            if (start >= input.len or !(std.ascii.isAlphanumeric(input[start]) or input[start] == '_')) {
+            var end = start;
+
+            // increment end as long as character is valid [A-Z/a-z/0-9/_]
+            while (end < input.len and (std.ascii.isAlphanumeric(input[end]) or input[end] == '_')) : (end += 1) {}
+
+            // treat as literal $ if its not followed by valid character
+            if (start == end) {
                 expanded.appendAssumeCapacity('$');
                 continue;
             }
 
-            var end = start;
-            while (end < input.len and (std.ascii.isAlphanumeric(input[end]) or input[end] == '_')) : (end += 1) {}
-
-            if (start == end) return error.InvalidVar;
-
-            const value = lookup_value(ast, input[start..end]) orelse {
+            const value = lookup_variable(ast, input[start..end]) orelse {
                 const middle = start + (end - start) / 2;
                 logger.out(.syntax, null, "{s}", .{input});
                 for (0..middle + 14) |_| {
-                    try logger.stdout.writeByte(' ');
+                    try logger.stderr.writeByte(' ');
                 }
                 logger.out(.info, null, "^ variable undefined.", .{});
                 return error.InvalidVar;
@@ -69,6 +69,8 @@ fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Al
 }
 
 pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args, allocator: std.mem.Allocator) !void {
+    // set threads to the number that might have been set by the user, if its not set (standard = 0) or set to 0 try to get cpu count
+    // if that fails set it to 1 (single threaded execution) and warn the user
     var threads = args.flags.threads;
     if (threads == 0) {
         threads = res: {
@@ -96,6 +98,16 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
                             }
 
                             logger.out(.debug, null, "{s} -> {s}", .{ cmd, expanded });
+                            if (args.flags.dry_run) {
+                                logger.out(.info, null, "{s}generated command:{s} {s} {s}[dry run]{s}", .{ logger.ansi.bold, logger.ansi.reset, expanded, logger.ansi.bold, logger.ansi.reset });
+                                continue;
+                            }
+
+                            const exit_code = execute_cmd(expanded, allocator) catch 1;
+                            if (exit_code != 0) {
+                                logger.out(.err, null, "command exited with code {d}.", .{exit_code});
+                                return;
+                            }
                         }
                         return;
                     }
@@ -107,6 +119,24 @@ pub fn run_build_rule(rule: []const u8, ast: []const parser.Ast, args: cli.Args,
         }
     }
 
-    logger.out(.err, null, "build rule '{s}' doesn't exist.", .{rule});
+    logger.out(.err, null, "build rule or option '{s}' doesn't exist.", .{rule});
     return error.InvalidRule;
+}
+
+fn execute_cmd(cmd: []const u8, allocator: std.mem.Allocator) !u8 {
+    logger.out(.info, null, "{s}executing command:{s} {s}", .{ logger.ansi.bold, logger.ansi.reset, cmd });
+    var child = std.process.Child.init(&[_][]const u8{ "/bin/sh", "-c", cmd }, allocator);
+
+    child.stdin_behavior = .Ignore;
+    child.stdout_behavior = .Inherit;
+    child.stderr_behavior = .Inherit;
+
+    try child.spawn();
+    const term = try child.wait();
+
+    return switch (term) {
+        .Exited => |code| code,
+        .Signal => return error.TerminateSignalReceived,
+        else => return error.ExecutionError,
+    };
 }

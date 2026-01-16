@@ -52,6 +52,17 @@ pub const Parser = struct {
 
             const name = try self.expect_and_consume(.TOK_IDENT);
 
+            // needed syntax:
+            // IDENT    EQ    STRING
+            // name     =       ""
+            // or
+            // IDENT   RBRACE
+            // name     {
+            // ...
+            //  }
+            // CLOSING BRACE
+            //
+
             switch (self.curr.type) {
                 .TOK_EQ => {
                     try self.next_token();

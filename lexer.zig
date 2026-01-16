@@ -71,7 +71,6 @@ fn make_token(tt: TokenType, lx: *Lexer) Token {
 }
 
 fn handle_comments(lx: *Lexer) Token {
-    lx.start_index += 1; // move past #
     while (advance(lx)) |c| {
         if (c == '\n') {
             lx.index -= 1;
@@ -83,20 +82,18 @@ fn handle_comments(lx: *Lexer) Token {
 }
 
 fn handle_strings(lx: *Lexer) !Token {
-    // get which kind of quote opened the string (' or ")
-    const q = lx.src[lx.start_index];
+    const q = lx.src[lx.start_index]; // get which kind of quote opened the string (' or ")
 
-    // move inside the string (over the quote)
-    lx.start_index = lx.index;
+    lx.start_index += 1; // make the string start after the opening quote
 
     while (advance(lx)) |c| {
         if (c == '\n') break;
 
         if (c == q) {
-            // move back inside the string so tok.value wont include the quote
-            lx.index -= 1;
-            // after making the token go back to the previous index
-            defer lx.index += 1;
+            lx.index -= 1; // move back inside the string so closing quote wont be included
+
+            defer lx.index += 1; // move past the closing quote again
+
             return make_token(.TOK_STRING, lx);
         }
     }
