@@ -92,10 +92,6 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
         return error.InvalidRule;
     };
 
-    logger.out(.debug, null, "threads: {d}, dry run: {}, verbose output: {}, selected rule: {s}", .{ threads, args.flags.dry_run, args.flags.verbose, rule });
-
-    logger.out(.info, null, "selected rule: {s}{s}{s}", .{ logger.ansi.bold, rule, logger.ansi.reset });
-
     for (ast) |node| {
         switch (node) {
             .RuleDecl => |r| {
@@ -108,7 +104,12 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
                             }
 
                             if (args.flags.dry_run) {
-                                logger.out(.info, null, "{s}generated command:{s} {s} {s}[dry run]{s}", .{ logger.ansi.bold, logger.ansi.reset, expanded, logger.ansi.bold, logger.ansi.reset });
+                                logger.out(
+                                    .info,
+                                    null,
+                                    "{s}generated command:{s} {s} {s}[dry run]{s}",
+                                    .{ logger.ansi.bold, logger.ansi.reset, expanded, logger.ansi.bold, logger.ansi.reset },
+                                );
                                 continue;
                             }
 
@@ -133,7 +134,6 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
 }
 
 fn execute_cmd(cmd: []const u8, allocator: std.mem.Allocator) !u8 {
-    logger.out(.info, null, "executing command: {s}{s}{s}", .{ logger.ansi.bold, cmd, logger.ansi.reset });
     var child = std.process.Child.init(&[_][]const u8{ "/bin/sh", "-c", cmd }, allocator);
 
     child.stdin_behavior = .Ignore;

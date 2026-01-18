@@ -31,16 +31,18 @@ pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytyp
 
     const prefix = switch (level) {
         .info => "",
-        .warning => ansi.yellow ++ "warning: ",
-        .err => ansi.red ++ "error: ",
-        .syntax => ansi.red ++ "syntax error: ",
-        .debug => ansi.magenta ++ "debug: ",
+        .warning => ansi.yellow ++ ansi.bold ++ "warning: ",
+        .err => ansi.red ++ ansi.bold ++ "error: ",
+        .syntax => ansi.red ++ ansi.bold ++ "syntax error: ",
+        .debug => ansi.magenta ++ ansi.bold ++ "debug: ",
     };
 
     if (level == .syntax and line != null) {
-        sink.print(ansi.bold ++ "{s}:{d}" ++ ansi.reset ++ ": " ++ ansi.bold ++ "{s}" ++ ansi.reset, .{ globals.default_build_file, line orelse 0, prefix }) catch return;
+        sink.print(
+            ansi.bold ++ "{s}:{d}" ++ ansi.reset ++ ": " ++ "{s}" ++ ansi.reset ++ fmt ++ "\n",
+            .{ globals.default_build_file, line.?, prefix } ++ args,
+        ) catch return;
     } else {
-        sink.print(ansi.bold ++ "{s}" ++ ansi.reset, .{prefix}) catch return;
+        sink.print("{s}" ++ ansi.reset ++ fmt ++ "\n", .{prefix} ++ args) catch return;
     }
-    sink.print(fmt ++ "\n", args) catch return;
 }

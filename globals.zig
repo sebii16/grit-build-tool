@@ -2,7 +2,7 @@ const std = @import("std");
 const logger = @import("logger.zig");
 
 pub const default_build_file = "build.grit";
-const ver = logger.ansi.bold ++ "grit 0.0.10" ++ logger.ansi.reset;
+const ver = logger.ansi.bold ++ "grit 0.1.0" ++ logger.ansi.reset;
 
 pub const ver_msg =
     ver ++
@@ -12,18 +12,30 @@ pub const ver_msg =
     ;
 
 pub const help_msg =
-    \\usage:
+    \\Usage:
 ++ logger.ansi.bold ++
     \\
-    \\ grit <rule> [-v] [-d] [-t<N>]
-    \\ grit <option>
+    \\  grit [rule] [build flags]
+    \\  grit [global flag]
+++ logger.ansi.reset ++
+    \\ 
+    \\
+    \\If no rule is specified, the  default rule will be executed (if one is set).
+    \\
+    \\
+++ logger.ansi.bold ++
+    \\Build flags:
 ++ logger.ansi.reset ++
     \\
+    \\  -d          Dry run: print commands without executing them.
+    \\  -v          Enable verbose output.
+    \\  -t<N>       Use N worker threads
+++ logger.ansi.bold ++
     \\
-    \\options: 
-    \\ -d            dry run: test a rule without executing it.
-    \\ -v            enable verbose output.
-    \\ -t<N>         use N threads.
-    \\ -h, --help    print this help message.
-    \\ --version     print version and license notice.
+    \\
+    \\Global flags: 
+++ logger.ansi.reset ++
+    \\
+    \\  -h, --help  Print this help message and exit.
+    \\  --version   Print version and license information and exit.
 ;

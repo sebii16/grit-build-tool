@@ -27,55 +27,64 @@ pub const Args = struct {
 pub fn handle_args() !Args {
     var res = Args{};
 
-    var args = std.process.args();
-    _ = args.next(); // skip exe name
+    const argv = std.os.argv;
+    const argc = argv.len;
+    var i: usize = 1;
 
-    const first = args.next() orelse {
-        return res;
+    if (i + 1 > argc) return res;
+
+    res.rule = r: {
+        if (argv[i][0] != '-') {
+            defer i += 1;
+            break :r std.mem.span(argv[i]);
+        }
+        break :r null;
     };
 
-    if (std.mem.eql(u8, first, "-h") or std.mem.eql(u8, first, "--help")) {
-        res.action = .Help;
-        return res;
-    } else if (std.mem.eql(u8, first, "--version")) {
-        res.action = .Version;
-        return res;
-    } else {
-        res.rule = first;
-        while (args.next()) |arg| {
-            if (arg.len < 2 or arg[0] != '-') {
-                logger.out(.err, null, "invalid flag: '{s}'.", .{arg});
-                return error.InvalidArgument;
-            }
-            for (arg[1..], 1..) |c, i| {
-                switch (c) {
-                    'v' => res.flags.verbose = true,
-                    'd' => res.flags.dry_run = true,
-                    't' => {
-                        if (i + 1 >= arg.len) {
-                            logger.out(.err, null, "missing value for '-t'.", .{});
-                            return error.InvalidArgument;
-                        }
+    while (i < argc) : (i += 1) {
+        const arg = std.mem.span(argv[i]);
 
-                        const num_str = arg[i + 1 ..];
-                        res.flags.threads = std.fmt.parseInt(u8, num_str, 10) catch |e| {
-                            switch (e) {
-                                error.InvalidCharacter => {
-                                    logger.out(.err, null, "value '{s}' isn't a number.", .{num_str});
-                                },
-                                error.Overflow => {
-                                    logger.out(.err, null, "value '{s}' is too big. Max size is {}.", .{ num_str, std.math.maxInt(u8) });
-                                },
-                            }
-                            return e;
-                        };
-                        break;
-                    },
-                    else => {
-                        logger.out(.err, null, "invalid flag: '{s}'.", .{arg});
-                        return error.InvalidArgument;
-                    },
-                }
+        if (res.rule == null) {
+            if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+                res.action = .Help;
+                return res;
+            } else if (std.mem.eql(u8, arg, "--version")) {
+                res.action = .Version;
+                return res;
+            }
+        }
+
+        if (arg.len < 2 or arg[0] != '-') {
+            logger.out(.err, null, "flag '{s}' is invalid.", .{arg});
+            return error.InvalidFlag;
+        }
+
+        for (arg[1..], 1..) |c, j| {
+            switch (c) {
+                'v' => res.flags.verbose = true,
+                'd' => res.flags.dry_run = true,
+                't' => {
+                    if (j + 1 >= arg.len) {
+                        logger.out(.err, null, "flag '{c}' is missing a value.", .{c});
+                        return error.InvalidFlag;
+                    }
+
+                    const num_str = arg[j + 1 ..];
+                    res.flags.threads = std.fmt.parseInt(u8, num_str, 10) catch |e| {
+                        logger.out(
+                            .err,
+                            null,
+                            "{s} is not a number or bigger than {d}.",
+                            .{ num_str, std.math.maxInt(@TypeOf(res.flags.threads)) },
+                        );
+                        return e;
+                    };
+                    break;
+                },
+                else => {
+                    logger.out(.err, null, "flag '{c}' is invalid.", .{c});
+                    return error.InvalidFlag;
+                },
             }
         }
     }
