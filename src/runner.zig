@@ -107,8 +107,8 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
                                 logger.out(
                                     .info,
                                     null,
-                                    "{s}generated command:{s} {s} {s}[dry run]{s}",
-                                    .{ logger.ansi.bold, logger.ansi.reset, expanded, logger.ansi.bold, logger.ansi.reset },
+                                    "generated command: {s} [dry run]",
+                                    .{expanded},
                                 );
                                 continue;
                             }
@@ -129,7 +129,7 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
         }
     }
 
-    logger.out(.err, null, "build rule {s} doesn't exist.", .{rule});
+    logger.out(.err, null, "build rule '{s}' doesn't exist.", .{rule});
     return error.InvalidRule;
 }
 

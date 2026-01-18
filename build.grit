@@ -1,29 +1,19 @@
-FILES = "main.zig"
+FILES = "src/main.zig"
 OUT = "grit"
-BUILDER_OUT = "build"
 DEBUG_FLAGS = "-O Debug -freference-trace=10"
 RELEASE_FLAGS = "-O ReleaseFast -fstrip"
 
 clean {
   "rm -f $OUT"
-  "rm -f $BUILDER_OUT"
-}
-
-test {
-  @default
-  'echo "test"'
 }
 
 debug {
+  @default
   "zig build-exe $FILES -femit-bin=$OUT $DEBUG_FLAGS"
 }
 
 release {
   "zig build-exe $FILES -femit-bin=$OUT $RELEASE_FLAGS"
-}
-
-builder {
-  "zig build-exe $FILES -femit-bin=$BUILDER_OUT $RELEASE_FLAGS"
 }
 
 error {

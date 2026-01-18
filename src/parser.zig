@@ -8,7 +8,6 @@ const cli = @import("cli.zig");
 //TODO:
 //clean this up
 //
-//
 
 const Var = struct {
     name: []const u8,
@@ -83,10 +82,10 @@ pub const Parser = struct {
 
                         if (self.curr.type == .TOK_AT) {
                             try self.next_token();
-                            _ = try self.expect(.TOK_DEFAULT_KW);
+                            _ = try self.expect(.TOK_DEFAULT);
                             if (self.default_rule != null) {
                                 logger.out(.syntax, self.lexer.curr_line, "@default can only be used on one rule", .{});
-                                return error.DefaultRuleCalledTwice;
+                                return error.MultipleDefaultRules;
                             }
                             self.default_rule = name.value;
                             continue;

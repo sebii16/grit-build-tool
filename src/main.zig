@@ -2,7 +2,7 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const cli = @import("cli.zig");
 const g = @import("globals.zig");
-const parser = @import("parser.zig");
+const p = @import("parser.zig");
 const runner = @import("runner.zig");
 const logger = @import("logger.zig");
 const builtin = @import("builtin");
@@ -30,8 +30,8 @@ pub fn main() u8 {
             const src = read_file(g.default_build_file, allocator) catch return 1;
             defer allocator.free(src);
 
-            var prs = parser.Parser{ .lexer = lexer.Lexer{ .src = src }, .allocator = allocator };
-            const ast = prs.parse_all() catch return 1;
+            var parser = p.Parser{ .lexer = lexer.Lexer{ .src = src }, .allocator = allocator };
+            const ast = parser.parse_all() catch return 1;
 
             defer {
                 logger.out(.debug, null, "cleaning up ast", .{});
@@ -47,7 +47,7 @@ pub fn main() u8 {
                 allocator.free(ast);
             }
 
-            runner.run_build_rule(ast, args, allocator, prs) catch return 1;
+            runner.run_build_rule(ast, args, allocator, parser) catch return 1;
         },
     }
 

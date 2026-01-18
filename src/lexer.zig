@@ -16,7 +16,7 @@ pub const TokenType = enum {
     TOK_COMMENT,
     TOK_STRING,
     TOK_IDENT,
-    TOK_DEFAULT_KW,
+    TOK_DEFAULT,
     TOK__INVALID,
 };
 
@@ -120,7 +120,7 @@ fn handle_idents(lx: *Lexer) Token {
 
 fn lookup_keyword(ident: []const u8) ?TokenType {
     return switch (ident.len) {
-        7 => if (std.mem.eql(u8, ident, "default")) .TOK_DEFAULT_KW else null,
+        7 => if (std.mem.eql(u8, ident, "default")) .TOK_DEFAULT else null,
         else => null,
     };
 }

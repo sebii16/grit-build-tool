@@ -7,7 +7,6 @@ const logger = @import("logger.zig");
 //
 
 pub const Flags = struct {
-    verbose: bool = false,
     dry_run: bool = false,
     threads: u8 = 0,
 };
@@ -48,7 +47,7 @@ pub fn handle_args() !Args {
             if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
                 res.action = .Help;
                 return res;
-            } else if (std.mem.eql(u8, arg, "--version")) {
+            } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
                 res.action = .Version;
                 return res;
             }
@@ -61,7 +60,6 @@ pub fn handle_args() !Args {
 
         for (arg[1..], 1..) |c, j| {
             switch (c) {
-                'v' => res.flags.verbose = true,
                 'd' => res.flags.dry_run = true,
                 't' => {
                     if (j + 1 >= arg.len) {
