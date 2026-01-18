@@ -2,12 +2,6 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const globals = @import("globals.zig");
 const logger = @import("logger.zig");
-const cli = @import("cli.zig");
-
-//
-//TODO:
-//clean this up
-//
 
 const Var = struct {
     name: []const u8,
@@ -48,60 +42,95 @@ pub const Parser = struct {
             logger.out(.debug, null, "cleaning up ast", .{});
         }
 
+        var pending_default = false;
+
         while (true) {
             try self.next_token();
 
             if (self.curr.type == .TOK_EOF) break;
 
-            if (self.curr.type == .TOK_NL or self.curr.type == .TOK_COMMENT) continue;
-
-            const name = try self.expect_and_advance(.TOK_IDENT);
+            if (self.curr.type == .TOK_NL) continue;
 
             switch (self.curr.type) {
-                .TOK_EQ => {
+                .TOK_IDENT => {
+                    const name = self.curr.value;
+
                     try self.next_token();
-                    const value = try self.expect_and_advance(.TOK_STRING);
 
-                    try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name.value, .value = value.value } });
-                },
-                .TOK_LBRACE => {
-                    var cmds: std.ArrayList([]const u8) = .empty;
-                    errdefer cmds.deinit(self.allocator);
-
-                    while (true) {
-                        try self.next_token();
-
-                        if (self.curr.type == .TOK_RBRACE) break;
-
-                        if (self.curr.type == .TOK_NL or self.curr.type == .TOK_COMMENT) continue;
-
-                        if (self.curr.type == .TOK_EOF) {
-                            logger.out(.syntax, self.lexer.curr_line, "expected '}}' got 'EOF'.", .{});
-                            return error.SyntaxError;
-                        }
-
-                        if (self.curr.type == .TOK_AT) {
-                            try self.next_token();
-                            _ = try self.expect(.TOK_DEFAULT);
-                            if (self.default_rule != null) {
-                                logger.out(.syntax, self.lexer.curr_line, "@default can only be used on one rule", .{});
-                                return error.MultipleDefaultRules;
+                    switch (self.curr.type) {
+                        .TOK_EQ => {
+                            if (pending_default) {
+                                logger.out(
+                                    .syntax,
+                                    self.lexer.curr_line,
+                                    "@default annotation cannot be called on a variable.",
+                                    .{},
+                                );
+                                return error.SyntaxError;
                             }
-                            self.default_rule = name.value;
-                            continue;
-                        }
+                            try self.next_token();
+                            const str = try self.expect_and_advance(.TOK_STRING);
 
-                        const cmd = try self.expect_and_advance(.TOK_STRING);
-                        try cmds.append(self.allocator, cmd.value);
+                            try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name, .value = str.value } });
+                        },
+                        .TOK_LBRACE => {
+                            if (pending_default) {
+                                self.default_rule = name;
+                                pending_default = false;
+                            }
+
+                            var cmds: std.ArrayList([]const u8) = .empty;
+                            errdefer cmds.deinit(self.allocator);
+
+                            while (true) {
+                                try self.next_token();
+
+                                if (self.curr.type == .TOK_RBRACE) break;
+
+                                if (self.curr.type == .TOK_NL) continue;
+
+                                if (self.curr.type == .TOK_EOF) {
+                                    logger.out(.syntax, self.lexer.curr_line, "Expected '}}' got EOF.", .{});
+                                    return error.SyntaxError;
+                                }
+
+                                const cmd = try self.expect_and_advance(.TOK_STRING);
+                                try cmds.append(self.allocator, cmd.value);
+                            }
+
+                            try nodes.append(self.allocator, Ast{
+                                .RuleDecl = .{ .name = name, .cmds = try cmds.toOwnedSlice(self.allocator) },
+                            });
+                        },
+                        else => {
+                            logger.out(.syntax, self.lexer.curr_line, "Expected '=' or '{{' got {s}.", .{@tagName(self.curr.type)});
+                            return error.SyntaxError;
+                        },
                     }
-                    // add all commands and the rule name to the arraylist
-                    try nodes.append(self.allocator, Ast{ .RuleDecl = .{ .name = name.value, .cmds = try cmds.toOwnedSlice(self.allocator) } });
+                },
+                .TOK_ANNOTATION => {
+                    if (!std.mem.eql(u8, self.curr.value, "default")) {
+                        logger.out(.syntax, self.lexer.curr_line, "Unknown annotation: @{s}.", .{self.curr.value});
+                        return error.SyntaxError;
+                    }
+
+                    if (self.default_rule != null or pending_default == true) {
+                        logger.out(.syntax, self.lexer.curr_line, "@default annotation has been called more than once.", .{});
+                        return error.SyntaxError;
+                    }
+
+                    pending_default = true;
                 },
                 else => {
-                    logger.out(.syntax, self.lexer.curr_line, "expected '=', '{{' or ':default', got {s}.", .{@tagName(self.curr.type)});
+                    logger.out(.syntax, self.lexer.curr_line, "Unexpected token: {s}.", .{@tagName(self.curr.type)});
                     return error.SyntaxError;
                 },
             }
+        }
+
+        if (pending_default) {
+            logger.out(.syntax, self.lexer.curr_line, "No rule declaration after @default annotation", .{});
+            return error.SyntaxError;
         }
 
         return nodes.toOwnedSlice(self.allocator);

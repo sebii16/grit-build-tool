@@ -2,10 +2,6 @@ const std = @import("std");
 const globals = @import("globals.zig");
 const logger = @import("logger.zig");
 
-//
-//TODO: fix handle_args
-//
-
 pub const Flags = struct {
     dry_run: bool = false,
     threads: u8 = 0,

@@ -2,21 +2,16 @@ const std = @import("std");
 const logger = @import("logger.zig");
 const globals = @import("globals.zig");
 
-//
-//TODO: add more keywords and implement it properly this is just testing
-//
-
 pub const TokenType = enum {
     TOK_EOF,
     TOK_NL,
     TOK_EQ,
     TOK_LBRACE,
     TOK_RBRACE,
-    TOK_AT,
     TOK_COMMENT,
     TOK_STRING,
     TOK_IDENT,
-    TOK_DEFAULT,
+    TOK_ANNOTATION,
     TOK__INVALID,
 };
 
@@ -48,12 +43,15 @@ pub const Lexer = struct {
                 '=' => return make_token(.TOK_EQ, self),
                 '{' => return make_token(.TOK_LBRACE, self),
                 '}' => return make_token(.TOK_RBRACE, self),
-                '@' => return make_token(.TOK_AT, self),
-                '#' => return handle_comments(self),
+                '@' => return make_annot_token(self),
+                '#' => {
+                    handle_comments(self);
+                    continue;
+                },
                 '\'', '"' => return handle_strings(self),
                 else => {
                     if (std.ascii.isAlphanumeric(c) or c == '_') {
-                        return handle_idents(self);
+                        return make_ident_token(self);
                     } else {
                         logger.out(.syntax, self.curr_line, "unexpected character: {c}.", .{c});
                         return error.UnexpectedCharacter;
@@ -75,15 +73,13 @@ fn make_token(tt: TokenType, lx: *Lexer) Token {
     return Token{ .type = tt, .value = lx.src[lx.start_index..lx.index] };
 }
 
-fn handle_comments(lx: *Lexer) Token {
+fn handle_comments(lx: *Lexer) void {
     while (advance(lx)) |c| {
         if (c == '\n') {
             lx.index -= 1;
             break;
         }
     }
-
-    return make_token(.TOK_COMMENT, lx);
 }
 
 fn handle_strings(lx: *Lexer) !Token {
@@ -107,7 +103,7 @@ fn handle_strings(lx: *Lexer) !Token {
     return error.UnterminatedString;
 }
 
-fn handle_idents(lx: *Lexer) Token {
+fn make_ident_token(lx: *Lexer) Token {
     while (advance(lx)) |c| {
         if (!std.ascii.isAlphanumeric(c) and c != '_') {
             lx.index -= 1;
@@ -115,12 +111,13 @@ fn handle_idents(lx: *Lexer) Token {
         }
     }
 
-    return make_token(lookup_keyword(lx.src[lx.start_index..lx.index]) orelse .TOK_IDENT, lx);
+    return make_token(.TOK_IDENT, lx);
 }
 
-fn lookup_keyword(ident: []const u8) ?TokenType {
-    return switch (ident.len) {
-        7 => if (std.mem.eql(u8, ident, "default")) .TOK_DEFAULT else null,
-        else => null,
-    };
+fn make_annot_token(lx: *Lexer) !Token {
+    lx.start_index += 1;
+
+    _ = make_ident_token(lx);
+
+    return make_token(.TOK_ANNOTATION, lx);
 }

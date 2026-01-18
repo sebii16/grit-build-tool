@@ -7,8 +7,8 @@ clean {
   "rm -f $OUT"
 }
 
+@default
 debug {
-  @default
   "zig build-exe $FILES -femit-bin=$OUT $DEBUG_FLAGS"
 }
 
@@ -17,5 +17,5 @@ release {
 }
 
 error {
-  "$FOO"
+ "$FOO"
 }

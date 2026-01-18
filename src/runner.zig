@@ -3,33 +3,59 @@ const parser = @import("parser.zig");
 const logger = @import("logger.zig");
 const cli = @import("cli.zig");
 
-//
-//TODO: clean this up
-//
+const VarMap = std.StringHashMapUnmanaged([]const u8);
 
-fn lookup_variable(ast: []const parser.Ast, name: []const u8) ?[]const u8 {
-    for (ast) |a| {
-        switch (a) {
+fn make_var_map(ast: []const parser.Ast, allocator: std.mem.Allocator) !VarMap {
+    var vars: VarMap = .{};
+
+    var count: u32 = 0;
+    for (ast) |n| {
+        if (n == .VarDecl) count += 1;
+    }
+
+    try vars.ensureTotalCapacity(allocator, count);
+
+    for (ast) |n| {
+        switch (n) {
             .VarDecl => |v| {
-                if (std.mem.eql(u8, v.name, name)) {
-                    return v.value;
+                if (vars.contains(v.name)) {
+                    logger.out(.syntax, null, "Duplicate variable '{s}'.", .{v.name});
+                    return error.DuplicateVar;
                 }
+                vars.putAssumeCapacity(v.name, v.value);
             },
             else => {},
         }
     }
 
-    return null;
+    return vars;
 }
 
-fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Allocator) ![]u8 {
+//fn lookup_variable(ast: []const parser.Ast, name: []const u8) ?[]const u8 {
+//  for (ast) |a| {
+//    switch (a) {
+//      .VarDecl => |v| {
+//        if (std.mem.eql(u8, v.name, name)) {
+//          return v.value;
+//     }
+//  },
+//  else => {},
+// }
+// }
+//
+//  return null;
+//}
+
+fn expand_vars(input: []const u8, vars: *const VarMap, allocator: std.mem.Allocator) ![]u8 {
     var expanded: std.ArrayList(u8) = .empty;
     defer expanded.deinit(allocator);
 
     try expanded.ensureTotalCapacity(allocator, input.len);
 
+    const len = input.len;
     var i: usize = 0;
-    while (i < input.len) : (i += 1) {
+
+    while (i < len) : (i += 1) {
         const c = input[i];
 
         // dont expand if $ is escaped with \
@@ -52,7 +78,8 @@ fn expand_vars(input: []const u8, ast: []const parser.Ast, allocator: std.mem.Al
                 continue;
             }
 
-            const value = lookup_variable(ast, input[start..end]) orelse {
+            const name = input[start..end];
+            const value = vars.get(name) orelse {
                 const middle = start + (end - start) / 2;
                 logger.out(.syntax, null, "{s}", .{input});
                 for (0..middle + 14) |_| {
@@ -92,38 +119,42 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
         return error.InvalidRule;
     };
 
+    var vars = try make_var_map(ast, allocator);
+    defer vars.deinit(allocator);
+
+    logger.out(.debug, null, "{s}", .{rule});
+
     for (ast) |node| {
         switch (node) {
             .RuleDecl => |r| {
-                if (std.mem.eql(u8, r.name, rule)) {
-                    if (r.cmds.len > 0) {
-                        for (r.cmds) |cmd| {
-                            const expanded = try expand_vars(cmd, ast, allocator);
-                            defer {
-                                allocator.free(expanded);
-                            }
+                if (!std.mem.eql(u8, r.name, rule)) continue;
 
-                            if (args.flags.dry_run) {
-                                logger.out(
-                                    .info,
-                                    null,
-                                    "generated command: {s} [dry run]",
-                                    .{expanded},
-                                );
-                                continue;
-                            }
-
-                            const exit_code = execute_cmd(expanded, allocator) catch 1;
-                            if (exit_code != 0) {
-                                logger.out(.err, null, "command exited with code {d}.", .{exit_code});
-                                return error.ExecutionError;
-                            }
-                        }
-                        return;
-                    }
+                if (r.cmds.len == 0) {
                     logger.out(.warning, null, "build rule '{s}' is empty.", .{r.name});
                     return;
                 }
+
+                for (r.cmds) |cmd| {
+                    const expanded = try expand_vars(cmd, &vars, allocator);
+                    defer allocator.free(expanded);
+
+                    if (args.flags.dry_run) {
+                        logger.out(
+                            .info,
+                            null,
+                            "generated command: {s} [dry run]",
+                            .{expanded},
+                        );
+                        continue;
+                    }
+
+                    const exit_code = execute_cmd(expanded, allocator) catch 1;
+                    if (exit_code != 0) {
+                        logger.out(.err, null, "command exited with code {d}.", .{exit_code});
+                        return error.ExecutionError;
+                    }
+                }
+                return;
             },
             else => {},
         }
