@@ -1,8 +1,18 @@
 const std = @import("std");
 const logger = @import("logger.zig");
+const builtin = @import("builtin");
+const os = @tagName(builtin.target.os.tag);
+const arch = @tagName(builtin.target.cpu.arch);
 
 pub const default_build_file = "build.grit";
-const ver = logger.ansi.bold ++ "grit 0.3.0" ++ logger.ansi.reset;
+const ver =
+    logger.ansi.bold
+    ++ "grit 0.3.1 ("
+    ++ os
+    ++ " "
+    ++ arch
+    ++ ")"
+    ++ logger.ansi.reset;
 
 pub const ver_msg =
     ver ++

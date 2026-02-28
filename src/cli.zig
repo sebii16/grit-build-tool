@@ -31,20 +31,15 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
 
     if (i + 1 > args.len) return res;
 
-
     errdefer if (res.rule_name) |r| {
         logger.out(.debug, null, "cleaning up rule_name", .{});
         allocator.free(r);
     };
 
-    res.rule_name = r: {
-        if (args[i][0] != '-') {
-            const copy = try allocator.dupe(u8, args[i]);
+    res.rule_name = if (args[i][0] != '-') r: {
             defer i += 1;
-            break :r copy;
-        }
-        break :r null;
-    };
+            break :r try allocator.dupe(u8, args[i]);
+    } else null;
 
     while (i < args.len) : (i += 1) {
         const arg = args[i];

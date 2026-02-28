@@ -2,7 +2,7 @@ const std = @import("std");
 const parser = @import("parser.zig");
 const logger = @import("logger.zig");
 const cli = @import("cli.zig");
-const os = @import("builtin").os;
+const builtin = @import("builtin");
 
 const VarMap = std.StringHashMapUnmanaged([]const u8);
 
@@ -134,7 +134,11 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
                         continue;
                     }
 
-                    const exit_code = execute_cmd(expanded, allocator) catch 1;
+                    const exit_code = execute_cmd(expanded, allocator) catch |e| {
+                        logger.out(.err, null, "execution failed: {s}.", .{@errorName(e)});
+                        return e;
+                    };
+
                     if (exit_code != 0) {
                         logger.out(.err, null, "command exited with code {d}.", .{exit_code});
                         return error.ExecutionError;
@@ -151,13 +155,11 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
 }
 
 fn execute_cmd(cmd: []const u8, allocator: std.mem.Allocator) !u8 {
-    const args = res: {
-        if (os.tag == .windows) {
-            break :res [_][]const u8{ "cmd.exe", "/C", cmd };
-        }
+    const args = if (builtin.target.os.tag == .windows)
+        [_][]const u8{ "cmd.exe", "/C", cmd }
+    else
+        [_][]const u8{ "sh", "-c", cmd };
 
-        break :res [_][]const u8{ "sh", "-c", cmd };
-    };
     var child = std.process.Child.init(args[0..], allocator);
 
     child.stdin_behavior = .Ignore;
@@ -169,7 +171,7 @@ fn execute_cmd(cmd: []const u8, allocator: std.mem.Allocator) !u8 {
 
     return switch (term) {
         .Exited => |code| code,
-        .Signal => return error.TerminateSignalReceived,
-        else => return error.ExecutionError,
+        .Signal => error.TerminateSignalReceived,
+        else => error.ExecutionError,
     };
 }
