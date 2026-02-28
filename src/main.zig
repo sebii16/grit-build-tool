@@ -8,7 +8,16 @@ const logger = @import("logger.zig");
 const builtin = @import("builtin");
 
 pub fn main() u8 {
-    const args = cli.handle_args() catch return 1;
+    var gpa = std.heap.DebugAllocator(.{}){};
+    defer {
+        if (gpa.deinit() == .leak) @panic("memory leaked");
+    }
+    const allocator = gpa.allocator();
+    const args = cli.handle_args(allocator) catch return 1;
+    defer if (args.rule_name) |r| {
+        logger.out(.debug, null, "cleaning up rule_name", .{});
+        allocator.free(r);
+    };
 
     switch (args.action) {
         .Help => {
@@ -21,11 +30,7 @@ pub fn main() u8 {
             return 0;
         },
         .Run => {
-            var gpa = std.heap.DebugAllocator(.{}){};
-            defer {
-                if (gpa.deinit() == .leak) @panic("memory leaked");
-            }
-            const allocator = gpa.allocator();
+           
 
             const src = read_file(g.default_build_file, allocator) catch return 1;
             defer allocator.free(src);

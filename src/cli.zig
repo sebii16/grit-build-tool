@@ -14,32 +14,42 @@ pub const Actions = enum {
 };
 
 pub const Args = struct {
-    rule: ?[]const u8 = null,
+    rule_name: ?[]const u8 = null,
     flags: Flags = .{},
     action: Actions = .Run,
 };
 
-pub fn handle_args() !Args {
+pub fn handle_args(allocator: std.mem.Allocator) !Args {
     var res = Args{};
 
-    const argv = std.os.argv;
-    const argc = argv.len;
-    var i: usize = 1;
+    const args = try std.process.argsAlloc(allocator);
+    defer {
+        logger.out(.debug, null, "cleaning up argsAlloc'd args", .{});
+        std.process.argsFree(allocator, args);
+    }
+    var i: usize = 1; // skip exe name
 
-    if (i + 1 > argc) return res;
+    if (i + 1 > args.len) return res;
 
-    res.rule = r: {
-        if (argv[i][0] != '-') {
+
+    errdefer if (res.rule_name) |r| {
+        logger.out(.debug, null, "cleaning up rule_name", .{});
+        allocator.free(r);
+    };
+
+    res.rule_name = r: {
+        if (args[i][0] != '-') {
+            const copy = try allocator.dupe(u8, args[i]);
             defer i += 1;
-            break :r std.mem.span(argv[i]);
+            break :r copy;
         }
         break :r null;
     };
 
-    while (i < argc) : (i += 1) {
-        const arg = std.mem.span(argv[i]);
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
 
-        if (res.rule == null) {
+        if (res.rule_name == null) {
             if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
                 res.action = .Help;
                 return res;

@@ -18,16 +18,10 @@ pub const ansi = struct {
     pub const magenta = "\x1b[35m";
 };
 
-pub const stdout = std.fs.File.stdout().deprecatedWriter();
-pub const stderr = std.fs.File.stderr().deprecatedWriter();
+pub const print = std.debug.print;
 
 pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytype) void {
     if (level == .debug and builtin.mode != .Debug) return;
-
-    const sink = switch (level) {
-        .info, .debug => stdout,
-        .warning, .err, .syntax => stderr,
-    };
 
     const prefix = switch (level) {
         .info => "",
@@ -38,11 +32,11 @@ pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytyp
     };
 
     if (level == .syntax and line != null) {
-        sink.print(
+        print(
             ansi.bold ++ "{s}:{d}" ++ ansi.reset ++ ": " ++ "{s}" ++ ansi.reset ++ fmt ++ "\n",
             .{ globals.default_build_file, line.?, prefix } ++ args,
-        ) catch return;
+        );
     } else {
-        sink.print("{s}" ++ ansi.reset ++ fmt ++ "\n", .{prefix} ++ args) catch return;
+        print("{s}" ++ ansi.reset ++ fmt ++ "\n", .{prefix} ++ args);
     }
 }
