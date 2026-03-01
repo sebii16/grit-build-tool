@@ -1,4 +1,5 @@
 FILES = "src/main.zig"
+#FILES = ""
 OUT = "grit"
 DEBUG_FLAGS = "-O Debug -freference-trace=10"
 RELEASE_FLAGS = "-O ReleaseFast -fstrip"

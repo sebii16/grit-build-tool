@@ -16,11 +16,13 @@ fn make_var_map(ast: []const parser.Ast, allocator: std.mem.Allocator) !VarMap {
 
     try vars.ensureTotalCapacity(allocator, count);
 
+    errdefer vars.deinit(allocator);
+
     for (ast) |n| {
         switch (n) {
             .VarDecl => |v| {
                 if (vars.contains(v.name)) {
-                    logger.out(.syntax, null, "Duplicate variable '{s}'.", .{v.name});
+                    logger.out(.syntax, null, "Variable '{s}' redefined.", .{v.name});
                     return error.DuplicateVar;
                 }
                 vars.putAssumeCapacity(v.name, v.value);

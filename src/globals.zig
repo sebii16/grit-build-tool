@@ -7,7 +7,7 @@ const arch = @tagName(builtin.target.cpu.arch);
 pub const default_build_file = "build.grit";
 const ver =
     logger.ansi.bold
-    ++ "grit 0.3.1 ("
+    ++ "grit 0.3.2 ("
     ++ os
     ++ " "
     ++ arch
