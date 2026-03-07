@@ -19,6 +19,8 @@ pub const ansi = struct {
 };
 
 pub const print = std.debug.print;
+//var w = std.fs.File.stdout().writer(&.{});
+//pub const stdout = &w.interface;
 
 pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytype) void {
     if (level == .debug and mode != .Debug) return;

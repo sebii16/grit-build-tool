@@ -68,12 +68,10 @@ fn expand_vars(input: []const u8, vars: *const VarMap, allocator: std.mem.Alloca
 
             const name = input[start..end];
             const value = vars.get(name) orelse {
-                const middle = start + (end - start) / 2;
                 logger.out(.syntax, null, "{s}", .{input});
-                for (0..middle + 14) |_| {
-                    logger.print(" ", .{});
-                }
-                logger.out(.info, null, "^ variable undefined.", .{});
+                const pad = (start + (end - start) / 2) + 14;
+                const spaces = [_]u8{' '} ** 256;
+                logger.out(.info, null, "{s}^ variable undefined.", .{spaces[0..@min(pad, spaces.len)]});
                 return error.InvalidVar;
             };
 
@@ -110,7 +108,7 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
     var vars = try make_var_map(ast, allocator);
     defer vars.deinit(allocator);
 
-    logger.out(.debug, null, "{s}", .{rule});
+    logger.out(.debug, null, "selected rule: {s}", .{rule});
 
     for (ast) |node| {
         switch (node) {
