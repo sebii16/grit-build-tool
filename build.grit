@@ -17,9 +17,9 @@ release {
 }
 
 syntax {
- "$INVALID aaaaaaaa"
+ "$ERROR1 aaaaaaaa"
 }
 
 execution {
-  "ajiaja"
+  "jiajiahuh"
 }

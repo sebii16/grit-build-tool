@@ -15,7 +15,6 @@ pub fn main() u8 {
 
     const args = cli.handle_args(allocator) catch return 1;
     defer if (args.rule_name) |r| {
-        logger.out(.debug, null, "cleaning up rule_name", .{});
         allocator.free(r);
     };
 
@@ -26,7 +25,6 @@ pub fn main() u8 {
         },
         .Version => {
             logger.out(.info, null, "{s}", .{g.ver_msg});
-            logger.out(.debug, null, "debug build", .{});
             return 0;
         },
         .Run => {
@@ -37,7 +35,6 @@ pub fn main() u8 {
             const ast = parser.parse_all() catch return 1;
 
             defer {
-                logger.out(.debug, null, "cleaning up ast", .{});
                 for (ast) |n| {
                     switch (n) {
                         .RuleDecl => |r| {
@@ -59,13 +56,13 @@ pub fn main() u8 {
 
 fn read_file(comptime path: []const u8, allocator: std.mem.Allocator) ![]u8 {
     const file = std.fs.cwd().openFile(path, .{ .mode = .read_only }) catch {
-        logger.out(.err, null, "failed to open '{s}'", .{ path });
+        logger.out(.err, null, "failed to open '{s}'", .{path});
         return error.ReadFile;
     };
     defer file.close();
 
     return file.readToEndAlloc(allocator, std.math.maxInt(usize)) catch {
-        logger.out(.err, null, "failed to read '{s}'", .{ path });
+        logger.out(.err, null, "failed to read '{s}'", .{path});
         return error.ReadFile;
     };
 }

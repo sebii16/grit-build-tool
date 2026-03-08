@@ -53,7 +53,7 @@ pub const Lexer = struct {
                     if (std.ascii.isAlphanumeric(c) or c == '_') {
                         return make_ident_token(self);
                     } else {
-                        logger.out(.syntax, self.curr_line, "unexpected character: {c}.", .{c});
+                        logger.out(.syntax, self.curr_line, "unexpected character: {c}", .{c});
                         return error.UnexpectedCharacter;
                     }
                 },
@@ -99,7 +99,7 @@ fn handle_strings(lx: *Lexer) !Token {
         }
     }
 
-    logger.out(.syntax, lx.curr_line, "unterminated string.", .{});
+    logger.out(.syntax, lx.curr_line, "unterminated string", .{});
     return error.UnterminatedString;
 }
 

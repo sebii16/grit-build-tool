@@ -24,7 +24,6 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
 
     const args = try std.process.argsAlloc(allocator);
     defer {
-        logger.out(.debug, null, "cleaning up argsAlloc'd args", .{});
         std.process.argsFree(allocator, args);
     }
     var i: usize = 1; // skip exe name
@@ -32,13 +31,12 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
     if (i + 1 > args.len) return res;
 
     errdefer if (res.rule_name) |r| {
-        logger.out(.debug, null, "cleaning up rule_name", .{});
         allocator.free(r);
     };
 
     res.rule_name = if (args[i][0] != '-') r: {
-            defer i += 1;
-            break :r try allocator.dupe(u8, args[i]);
+        defer i += 1;
+        break :r try allocator.dupe(u8, args[i]);
     } else null;
 
     while (i < args.len) : (i += 1) {
@@ -55,7 +53,7 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
         }
 
         if (arg.len < 2 or arg[0] != '-') {
-            logger.out(.err, null, "flag '{s}' is invalid.", .{arg});
+            logger.out(.err, null, "invalid flag: '{s}'", .{arg});
             return error.InvalidFlag;
         }
 
@@ -64,7 +62,7 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
                 'd' => res.flags.dry_run = true,
                 't' => {
                     if (j + 1 >= arg.len) {
-                        logger.out(.err, null, "flag '{c}' is missing a value.", .{c});
+                        logger.out(.err, null, "flag '{c}' is missing a value", .{c});
                         return error.InvalidFlag;
                     }
 
@@ -73,7 +71,7 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
                         logger.out(
                             .err,
                             null,
-                            "{s} is not a number or bigger than {d}.",
+                            "{s} is not a number or bigger than {d}",
                             .{ num_str, std.math.maxInt(@TypeOf(res.flags.threads)) },
                         );
                         return e;
@@ -81,7 +79,7 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
                     break;
                 },
                 else => {
-                    logger.out(.err, null, "flag '{c}' is invalid.", .{c});
+                    logger.out(.err, null, "invalid flag: '{s}'", .{arg[j..]});
                     return error.InvalidFlag;
                 },
             }

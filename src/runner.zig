@@ -22,7 +22,7 @@ fn make_var_map(ast: []const parser.Ast, allocator: std.mem.Allocator) !VarMap {
         switch (n) {
             .VarDecl => |v| {
                 if (vars.contains(v.name)) {
-                    logger.out(.syntax, null, "Variable '{s}' redefined.", .{v.name});
+                    logger.out(.syntax, null, "variable '{s}' redefined", .{v.name});
                     return error.DuplicateVar;
                 }
                 vars.putAssumeCapacity(v.name, v.value);
@@ -34,7 +34,7 @@ fn make_var_map(ast: []const parser.Ast, allocator: std.mem.Allocator) !VarMap {
     return vars;
 }
 
-fn expand_vars(input: []const u8, vars: *const VarMap, allocator: std.mem.Allocator) ![]const u8 {
+fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const VarMap, allocator: std.mem.Allocator) ![]const u8 {
     var expanded: std.ArrayList(u8) = .empty;
     defer expanded.deinit(allocator);
 
@@ -68,10 +68,17 @@ fn expand_vars(input: []const u8, vars: *const VarMap, allocator: std.mem.Alloca
 
             const name = input[start..end];
             const value = vars.get(name) orelse {
-                logger.out(.syntax, null, "{s}", .{input});
-                const pad = (start + (end - start) / 2) + 14;
+                var buf: [256]u8 = undefined;
+                const w = std.fmt.bufPrint(&buf, "in rule '{s}': ", .{rule_name}) catch "";
+
+                // midpoint of the undefined variable + error prefix len (14) + len of w - 1
+                const caret_pos = (start + end) / 2 + 14 + w.len - 1;
                 const spaces = [_]u8{' '} ** 256;
-                logger.out(.info, null, "{s}^ variable undefined.", .{spaces[0..@min(pad, spaces.len)]});
+
+                logger.out(.syntax, null, "{s}{s}", .{ w, input });
+
+                // pad with spaces so '^' aligns at caret_pos
+                logger.out(.info, null, "{s}^ variable undefined", .{spaces[0..@min(caret_pos, spaces.len)]});
                 return error.InvalidVar;
             };
 
@@ -92,7 +99,7 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
     if (threads == 0) {
         threads = res: {
             const cpus = std.Thread.getCpuCount() catch {
-                logger.out(.warning, null, "failed to get CPU count; defaulting to 1. Use -t<N> to override.", .{});
+                logger.out(.warning, null, "failed to get CPU count; defaulting to 1. Use -t<N> to override", .{});
                 break :res 1;
             };
             const cpus_u8 = @min(cpus, @as(usize, std.math.maxInt(u8)));
@@ -108,7 +115,7 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
     var vars = try make_var_map(ast, allocator);
     defer vars.deinit(allocator);
 
-    logger.out(.debug, null, "selected rule: {s}", .{rule});
+    logger.out(.info, null, "selected rule '{s}'", .{rule});
 
     for (ast) |node| {
         switch (node) {
@@ -116,12 +123,12 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
                 if (!std.mem.eql(u8, r.name, rule)) continue;
 
                 if (r.cmds.len == 0) {
-                    logger.out(.warning, null, "build rule '{s}' is empty.", .{r.name});
+                    logger.out(.warning, null, "build rule '{s}' is empty", .{r.name});
                     return;
                 }
 
                 for (r.cmds) |cmd| {
-                    const expanded = try expand_vars(cmd, &vars, allocator);
+                    const expanded = try expand_vars(cmd, rule, &vars, allocator);
                     defer allocator.free(expanded);
 
                     if (args.flags.dry_run) {
@@ -135,12 +142,12 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
                     }
 
                     const exit_code = execute_cmd(expanded, allocator) catch |e| {
-                        logger.out(.err, null, "execution failed: {s}.", .{@errorName(e)});
+                        logger.out(.err, null, "execution failed: {s}", .{@errorName(e)});
                         return e;
                     };
 
                     if (exit_code != 0) {
-                        logger.out(.err, null, "command exited with code {d}.", .{exit_code});
+                        logger.out(.err, null, "command exited with code {d}", .{exit_code});
                         return error.ExecutionError;
                     }
                 }

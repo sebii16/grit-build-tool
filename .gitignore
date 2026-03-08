@@ -1,3 +1,5 @@
 grit
 *.exe
 *.pdb
+*_old
+Makefile

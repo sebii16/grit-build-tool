@@ -6,13 +6,7 @@ const arch = @tagName(builtin.target.cpu.arch);
 
 pub const default_build_file = "build.grit";
 const ver =
-    logger.ansi.bold
-    ++ "grit 0.3.3 ("
-    ++ os
-    ++ " "
-    ++ arch
-    ++ ")"
-    ++ logger.ansi.reset;
+    logger.ansi.bold ++ "grit 0.3.4 (" ++ os ++ " " ++ arch ++ if (builtin.mode == .Debug) " debug build)" else ")" ++ logger.ansi.reset;
 
 pub const ver_msg =
     ver ++
