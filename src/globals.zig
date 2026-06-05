@@ -4,12 +4,14 @@ const builtin = @import("builtin");
 const os = @tagName(builtin.target.os.tag);
 const arch = @tagName(builtin.target.cpu.arch);
 
+pub var init: std.process.Init = undefined;
+
 pub const default_build_file = "build.grit";
 const ver =
-    logger.ansi.bold ++ "grit 0.3.4 (" ++ os ++ " " ++ arch ++ if (builtin.mode == .Debug) " debug build)" else ")" ++ logger.ansi.reset;
+    logger.ansi.bold ++ "grit 0.4.5 (" ++ os ++ " " ++ arch ++ if (builtin.mode == .Debug) " debug build)" else ")";
 
 pub const ver_msg =
-    ver ++
+    ver ++ logger.ansi.reset ++
     \\
     \\Copyright (c) 2026 sebii16
     \\Licensed under the MIT License - see LICENSE for more info.
@@ -43,4 +45,5 @@ pub const help_msg =
     \\
     \\  -h, --help      Print this help message and exit.
     \\  -v, --version   Print version and license information and exit.
+    \\  -l, --list      List all available build rules.
     ;

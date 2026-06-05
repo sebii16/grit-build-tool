@@ -3,42 +3,17 @@ const parser = @import("parser.zig");
 const logger = @import("logger.zig");
 const cli = @import("cli.zig");
 const builtin = @import("builtin");
+const globals = @import("globals.zig");
+const _c = @cImport({
+    @cInclude("time.h");
+   // @cInclude("conio.h");
+});
 
-const VarMap = std.StringHashMapUnmanaged([]const u8);
-
-fn make_var_map(ast: []const parser.Ast, allocator: std.mem.Allocator) !VarMap {
-    var vars: VarMap = .{};
-
-    var count: u32 = 0;
-    for (ast) |n| {
-        if (n == .VarDecl) count += 1;
-    }
-
-    try vars.ensureTotalCapacity(allocator, count);
-
-    errdefer vars.deinit(allocator);
-
-    for (ast) |n| {
-        switch (n) {
-            .VarDecl => |v| {
-                if (vars.contains(v.name)) {
-                    logger.out(.syntax, null, "variable '{s}' redefined", .{v.name});
-                    return error.DuplicateVar;
-                }
-                vars.putAssumeCapacity(v.name, v.value);
-            },
-            else => {},
-        }
-    }
-
-    return vars;
-}
-
-fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const VarMap, allocator: std.mem.Allocator) ![]const u8 {
+fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.VarMap) ![]const u8 {
     var expanded: std.ArrayList(u8) = .empty;
-    defer expanded.deinit(allocator);
+    defer expanded.deinit(globals.init.arena.allocator());
 
-    try expanded.ensureTotalCapacity(allocator, input.len);
+    try expanded.ensureTotalCapacity(globals.init.arena.allocator(), input.len);
 
     const len = input.len;
     var i: usize = 0;
@@ -66,56 +41,62 @@ fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const VarMap, al
                 continue;
             }
 
-            const name = input[start..end];
-            const value = vars.get(name) orelse {
-                var buf: [256]u8 = undefined;
-                const w = std.fmt.bufPrint(&buf, "in rule '{s}': ", .{rule_name}) catch "";
-
-                // midpoint of the undefined variable + error prefix len (14) + len of w - 1
-                const caret_pos = (start + end) / 2 + 14 + w.len - 1;
-                const spaces = [_]u8{' '} ** 256;
-
-                logger.out(.syntax, null, "{s}{s}", .{ w, input });
-
-                // pad with spaces so '^' aligns at caret_pos
-                logger.out(.info, null, "{s}^ variable undefined", .{spaces[0..@min(caret_pos, spaces.len)]});
-                return error.InvalidVar;
-            };
-
-            try expanded.appendSlice(allocator, value);
+            const var_name = input[start..end];
+            const value = vars.get(var_name);
+            if (value == null) {
+                try handle_undefined_var(input, rule_name, var_name, start, &expanded);
+            } else {
+                try expanded.appendSlice(globals.init.arena.allocator(), value.?);
+            }
             i = end - 1;
             continue;
         }
         expanded.appendAssumeCapacity(c);
     }
 
-    return try expanded.toOwnedSlice(allocator);
+    return try expanded.toOwnedSlice(globals.init.arena.allocator());
 }
 
-pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.mem.Allocator, prs: parser.Parser) !void {
-    // set threads to the number that might have been set by the user, if its not set (standard = 0) or set to 0 try to get cpu count
-    // if that fails set it to 1 (single threaded execution) and warn the user
-    var threads = args.flags.threads;
-    if (threads == 0) {
-        threads = res: {
-            const cpus = std.Thread.getCpuCount() catch {
-                logger.out(.warning, null, "failed to get CPU count; defaulting to 1. Use -t<N> to override", .{});
-                break :res 1;
-            };
-            const cpus_u8 = @min(cpus, @as(usize, std.math.maxInt(u8)));
-            break :res @intCast(cpus_u8);
-        };
+fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name: []const u8, var_start_point: usize, expanded_arr_list: *std.ArrayList(u8)) !void {
+    // handle builtin variables
+    if (std.ascii.startsWithIgnoreCase(var_name, "builtin_")) {
+        if (std.ascii.eqlIgnoreCase(var_name[8..], "date")) {
+            var time: _c.time_t = _c.time(null);
+            const tm = _c.localtime(&time).?;
+            var buf: [9]u8 = undefined;
+
+            const date = try std.fmt.bufPrint(&buf, "{d:0>2}-{d:0>2}-{d:0>2}", .{
+                @as(u32, @intCast(tm.*.tm_mday)),
+                @as(u32, @intCast(tm.*.tm_mon + 1)),
+                @as(u32, @intCast(@mod(tm.*.tm_year + 1900, 100)))
+            });
+            try expanded_arr_list.appendSlice(globals.init.arena.allocator(), date);
+            return;
+        }
     }
 
-    const rule = args.rule_name orelse prs.default_rule orelse {
+    var buf: [256]u8 = undefined;
+    const w = std.fmt.bufPrint(&buf, "undefined variable in rule '{s}': ", .{rule_name}) catch "";
+
+    const var_pos = 14 + w.len + var_start_point - 1; // caret_pos = 14 (len of syntax error prefix) + w.len + start pos of the variable - 1 = pos of "$variable_name"
+    const spaces = [_]u8{' '} ** 512;
+    const tildes = [_]u8{'~'} ** 128;
+
+    logger.out(.syntax, null, "{s}{s}", .{ w, full_input });
+                
+    // pad with spaces so '^' aligns at var_pos
+    logger.out(.info, null, "{s}" ++ logger.ansi.red ++ "^{s}" ++ logger.ansi.reset, .{spaces[0..@min(var_pos, spaces.len)], tildes[0..@min(var_name.len, tildes.len)]});
+    return error.InvalidVar;
+}
+
+pub fn run_build_rule(ast: []const parser.Ast, config: cli.Config, prs: parser.Parser) !void {
+    const rule = config.rule_name orelse prs.default_rule orelse {
         logger.out(.err, null, "no build rule selected", .{});
         return error.InvalidRule;
     };
 
-    var vars = try make_var_map(ast, allocator);
-    defer vars.deinit(allocator);
-
-    logger.out(.info, null, "selected rule '{s}'", .{rule});
+    var vars = try parser.Ast.make_var_map(ast);
+    defer vars.deinit(globals.init.arena.allocator());
 
     for (ast) |node| {
         switch (node) {
@@ -127,21 +108,13 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
                     return;
                 }
 
+                logger.out(.info, null, "executing build rule: '{s}'", .{rule});
+
                 for (r.cmds) |cmd| {
-                    const expanded = try expand_vars(cmd, rule, &vars, allocator);
-                    defer allocator.free(expanded);
+                    const expanded = try expand_vars(cmd, rule, &vars);
 
-                    if (args.flags.dry_run) {
-                        logger.out(
-                            .info,
-                            null,
-                            "generated command: '{s}' [dry run]",
-                            .{expanded},
-                        );
-                        continue;
-                    }
 
-                    const exit_code = execute_cmd(expanded, allocator) catch |e| {
+                    const exit_code = execute_cmd(expanded, config.dry_run) catch |e| {
                         logger.out(.err, null, "execution failed: {s}", .{@errorName(e)});
                         return e;
                     };
@@ -161,24 +134,24 @@ pub fn run_build_rule(ast: []const parser.Ast, args: cli.Args, allocator: std.me
     return error.InvalidRule;
 }
 
-fn execute_cmd(cmd: []const u8, allocator: std.mem.Allocator) !u8 {
+fn execute_cmd(cmd: []const u8, dry_run: bool) !u8 {
     const args = if (builtin.target.os.tag == .windows)
         [_][]const u8{ "cmd.exe", "/C", cmd }
     else
         [_][]const u8{ "sh", "-c", cmd };
 
-    var child = std.process.Child.init(args[0..], allocator);
+    logger.out(.info, null, "{s}{s}", .{cmd, if (dry_run) " [dry run]" else ""});
 
-    child.stdin_behavior = .Ignore;
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
+    if (dry_run)
+        return 0;
 
-    try child.spawn();
-    const term = try child.wait();
+    var child = try std.process.spawn(globals.init.io, .{.argv = args[0..], .stdin = .ignore, .stdout = .inherit, .stderr = .inherit});
+
+    const term = try child.wait(globals.init.io);
 
     return switch (term) {
-        .Exited => |code| code,
-        .Signal => error.TerminateSignalReceived,
+        .exited => |code| code,
+        .signal => error.TerminateSignalReceived,
         else => error.ExecutionError,
     };
 }

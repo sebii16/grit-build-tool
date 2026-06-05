@@ -1,7 +1,7 @@
 FILES = "src/main.zig"
 OUT = "grit"
-DEBUG_FLAGS = "-O Debug -freference-trace=10"
-RELEASE_FLAGS = "-O ReleaseFast -fstrip"
+DEBUG_FLAGS = "-O Debug -freference-trace=10 -lc"
+RELEASE_FLAGS = "-O ReleaseSmall -fstrip -lc"
 
 clean {
   "rm -f $OUT"
@@ -9,17 +9,22 @@ clean {
 
 @default
 debug {
-  "zig build-exe $FILES -femit-bin=$OUT $DEBUG_FLAGS"
+  'zig build-exe $FILES -femit-bin=$OUT-d.exe $DEBUG_FLAGS'
 }
 
 release {
-  "zig build-exe $FILES -femit-bin=$OUT $RELEASE_FLAGS"
+  'zig build-exe $FILES -femit-bin=$OUT.exe $RELEASE_FLAGS'
+}
+
+install {
+  "copy $OUT.exe c:\grit"
+  "copy LICENSE c:\grit"
 }
 
 syntax {
- "$ERROR1 aaaaaaaa"
+ "aaaaaaaa $ERROR1"
 }
 
-execution {
-  "jiajiahuh"
+test {
+  "echo $builtin_date"
 }

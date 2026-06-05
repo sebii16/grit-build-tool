@@ -12,6 +12,9 @@ pub const TokenType = enum {
     TOK_STRING,
     TOK_IDENT,
     TOK_ANNOTATION,
+    TOK_LPAREN,
+    TOK_RPAREN,
+    TOK_COMMA,
     TOK__INVALID,
 };
 
@@ -48,6 +51,9 @@ pub const Lexer = struct {
                     handle_comments(self);
                     continue;
                 },
+                '(' => return make_token(.TOK_LPAREN, self),
+                ')' => return make_token(.TOK_RPAREN, self),
+                ',' => return make_token(.TOK_COMMA, self),
                 '\'', '"' => return handle_strings(self),
                 else => {
                     if (std.ascii.isAlphanumeric(c) or c == '_') {

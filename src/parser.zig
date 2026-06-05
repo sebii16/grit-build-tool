@@ -13,31 +13,61 @@ const Rule = struct {
     cmds: [][]const u8,
 };
 
+
+pub const VarMap = std.StringHashMapUnmanaged([]const u8);
+
 pub const Ast = union(enum) {
     VarDecl: Var,
     RuleDecl: Rule,
 
-    pub fn cleanup(self: Ast, allocator: std.mem.Allocator) void {
+    pub fn cleanup(self: Ast) void {
         switch (self) {
-            .RuleDecl => |r| allocator.free(r.cmds),
+            .RuleDecl => |r| globals.init.arena.allocator().free(r.cmds),
             .VarDecl => {},
         }
     }
-};
+
+    pub fn make_var_map(self: []const Ast) !VarMap {
+        var vars: VarMap = .{};
+
+        var count: u32 = 0;
+        for (self) |n| {
+            if (n == .VarDecl) count += 1;
+        }
+
+        try vars.ensureTotalCapacity(globals.init.arena.allocator(), count);
+
+        // errdefer vars.deinit(allocator);
+
+        for (self) |n| {
+            switch (n) {
+                .VarDecl => |v| {
+                 if (vars.contains(v.name)) {
+                      logger.out(.syntax, null, "variable '{s}' redefined", .{v.name});
+                     return error.DuplicateVar;
+                  }
+                 vars.putAssumeCapacity(v.name, v.value);
+             },
+             else => {},
+         }
+     }
+    
+     return vars;
+    }
+    };
 
 pub const Parser = struct {
     lexer: lexer.Lexer,
     curr: lexer.Token = .{ .value = &[_]u8{}, .type = .TOK__INVALID },
     default_rule: ?[]const u8 = null,
-    allocator: std.mem.Allocator,
 
     pub fn parse_all(self: *Parser) ![]Ast {
         var nodes: std.ArrayList(Ast) = .empty;
         errdefer {
             for (nodes.items) |n| {
-                n.cleanup(self.allocator);
+                n.cleanup();
             }
-            nodes.deinit(self.allocator);
+            nodes.deinit(globals.init.arena.allocator());
         }
 
         var pending_default = false;
@@ -56,7 +86,7 @@ pub const Parser = struct {
                                 logger.out(
                                     .syntax,
                                     self.lexer.curr_line,
-                                    "@default cannot be called on a variable",
+                                    "@default cannot be called here",
                                     .{},
                                 );
                                 return error.SyntaxError;
@@ -67,7 +97,7 @@ pub const Parser = struct {
                             const str = self.curr.value;
                             try self.next_token();
 
-                            try nodes.append(self.allocator, Ast{ .VarDecl = .{ .name = name, .value = str } });
+                            try nodes.append(globals.init.arena.allocator(), Ast{ .VarDecl = .{ .name = name, .value = str } });
                         },
                         .TOK_LBRACE => {
                             if (pending_default) {
@@ -78,7 +108,9 @@ pub const Parser = struct {
                             try self.next_token();
 
                             var cmds: std.ArrayList([]const u8) = .empty;
-                            errdefer cmds.deinit(self.allocator);
+                            errdefer {
+                                cmds.deinit(globals.init.arena.allocator());
+                            }
 
                             while (self.curr.type != .TOK_RBRACE) {
                                 if (self.curr.type == .TOK_EOF) {
@@ -86,17 +118,35 @@ pub const Parser = struct {
                                     return error.SyntaxError;
                                 }
 
-                                try self.expect(.TOK_STRING);
-                                const cmd = self.curr.value;
-                                try cmds.append(self.allocator, cmd);
+                                switch (self.curr.type) {
+                                    .TOK_STRING => {
+                                        const cmd = self.curr.value;
+                                        try cmds.append(globals.init.arena.allocator(), cmd);
+                                    },
+                                    .TOK_ANNOTATION => {
+                                        logger.out(.debug, self.lexer.curr_line, "annotation: {s}", .{self.curr.value});
+                                        if (std.mem.eql(u8, self.curr.value, "seq")) {
+                                            logger.out(.debug, self.lexer.curr_line, "sequential enabled", .{});
+                                        } else if (std.mem.eql(u8, self.curr.value, "par")) {
+                                            logger.out(.debug, self.lexer.curr_line, "parallel enabled", .{});
+                                        } else {
+                                            logger.out(.syntax, self.lexer.curr_line, "unknown annotation '@{s}'", .{self.curr.value});
+                                            return error.SyntaxError;
+                                        }
+                                    },
+                                    else => {
+                                        logger.out(.syntax, self.lexer.curr_line, "unexpected token: '{s}'", .{@tagName(self.curr.type)}); 
+                                        return error.SyntaxError;
+                                    }
+                                }
 
                                 try self.next_token();
                             }
 
                             try self.next_token();
 
-                            try nodes.append(self.allocator, Ast{
-                                .RuleDecl = .{ .name = name, .cmds = try cmds.toOwnedSlice(self.allocator) },
+                            try nodes.append(globals.init.arena.allocator(), Ast{
+                                .RuleDecl = .{ .name = name, .cmds = try cmds.toOwnedSlice(globals.init.arena.allocator())},
                             });
                         },
                         else => {
@@ -127,11 +177,11 @@ pub const Parser = struct {
         }
 
         if (pending_default) {
-            logger.out(.syntax, self.lexer.curr_line, "no rule declared calling @default", .{});
+            logger.out(.syntax, self.lexer.curr_line, "no rule found after @default", .{});
             return error.SyntaxError;
         }
 
-        return nodes.toOwnedSlice(self.allocator);
+        return nodes.toOwnedSlice(globals.init.arena.allocator());
     }
 
     fn next_token(self: *Parser) !void {

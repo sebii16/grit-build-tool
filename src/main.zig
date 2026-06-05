@@ -1,67 +1,54 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
 const cli = @import("cli.zig");
-const g = @import("globals.zig");
 const p = @import("parser.zig");
 const runner = @import("runner.zig");
 const logger = @import("logger.zig");
+const globals = @import("globals.zig");
 
-pub fn main() u8 {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer {
-        if (gpa.deinit() == .leak) @panic("memory leaked");
-    }
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) u8 {
+    globals.init = init;
+ //   const allocator = init.arena.allocator();
+ 
+    errdefer init.arena.deinit();
 
-    const args = cli.handle_args(allocator) catch return 1;
-    defer if (args.rule_name) |r| {
-        allocator.free(r);
-    };
+    const src = read_file(globals.default_build_file) catch return 1;
+
+    var parser = p.Parser{ .lexer = lexer.Lexer{ .src = src }};
+
+    const ast = parser.parse_all() catch return 1;
+
+    const args = cli.handle_args() catch return 1;
+    //defer if (args.config.rule_name) |r| allocator.free(r);
 
     switch (args.action) {
         .Help => {
-            logger.out(.info, null, "{s}", .{g.help_msg});
-            return 0;
+            logger.out(.info, null, "{s}", .{globals.help_msg});
         },
         .Version => {
-            logger.out(.info, null, "{s}", .{g.ver_msg});
-            return 0;
+            logger.out(.info, null, "{s}", .{globals.ver_msg});
+        },
+        .List => {
+            logger.out(.info, null, logger.ansi.bold ++ "Available rules:" ++ logger.ansi.reset, .{});
+            for (ast) |n| {
+                switch (n) {
+                    .RuleDecl => |r| {
+                        logger.out(.info, null, "  {s}", .{r.name});
+                    },
+                    else => {},
+                }
+            }
         },
         .Run => {
-            const src = read_file(g.default_build_file, allocator) catch return 1;
-            defer allocator.free(src);
-
-            var parser = p.Parser{ .lexer = lexer.Lexer{ .src = src }, .allocator = allocator };
-            const ast = parser.parse_all() catch return 1;
-
-            defer {
-                for (ast) |n| {
-                    switch (n) {
-                        .RuleDecl => |r| {
-                            allocator.free(r.cmds);
-                        },
-                        else => {},
-                    }
-                }
-
-                allocator.free(ast);
-            }
-
-            runner.run_build_rule(ast, args, allocator, parser) catch return 1;
+            runner.run_build_rule(ast, args.config, parser) catch return 1;
         },
     }
 
     return 0;
 }
 
-fn read_file(comptime path: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    const file = std.fs.cwd().openFile(path, .{ .mode = .read_only }) catch {
-        logger.out(.err, null, "failed to open '{s}'", .{path});
-        return error.ReadFile;
-    };
-    defer file.close();
-
-    return file.readToEndAlloc(allocator, std.math.maxInt(usize)) catch {
+fn read_file(comptime path: []const u8) ![]u8 {
+    return std.Io.Dir.readFileAlloc(std.Io.Dir.cwd(), globals.init.io, path, globals.init.arena.allocator(), .unlimited) catch {
         logger.out(.err, null, "failed to read '{s}'", .{path});
         return error.ReadFile;
     };

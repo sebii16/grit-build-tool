@@ -18,18 +18,13 @@ pub const ansi = struct {
     pub const magenta = "\x1b[35m";
 };
 
-//pub const print = std.debug.print;
-
-pub const stdout = std.fs.File.stdout();
-pub const stderr = std.fs.File.stderr();
-
 pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytype) void {
     if (level == .debug and builtin.mode != .Debug) return;
 
-    const sink = switch (level) {
-        .info, .warning => stdout,
-        else => stderr,
-    };
+    var sink = if (level == .info or level == .warning)
+        std.Io.File.stdout().writer(globals.init.io, &.{})
+    else
+        std.Io.File.stderr().writer(globals.init.io, &.{});
 
     const prefix = switch (level) {
         .info => "",
@@ -39,7 +34,7 @@ pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytyp
         .debug => ansi.magenta ++ ansi.bold ++ "debug: " ++ ansi.reset,
     };
 
-    var buf: [512]u8 = undefined;
+    var buf: [1024]u8 = undefined;
     const w = if (level == .syntax and line != null)
         std.fmt.bufPrint(
             &buf,
@@ -53,5 +48,5 @@ pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytyp
             .{prefix} ++ args,
         ) catch return;
 
-    sink.writeAll(w) catch {};
+    sink.interface.writeAll(w) catch {};
 }
