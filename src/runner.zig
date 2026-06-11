@@ -4,14 +4,19 @@ const logger = @import("logger.zig");
 const cli = @import("cli.zig");
 const builtin = @import("builtin");
 const globals = @import("globals.zig");
-const _c = @cImport({
-    @cInclude("time.h");
-   // @cInclude("conio.h");
-});
+const builtins = @import("builtins.zig");
+
+pub const Config = struct {
+    dry_run: bool = false,
+    no_expand: bool = false,
+    //threads: u8 = 1,
+    rule_name: ?[]const u8 = null,
+    build_file: []const u8 = globals.default_build_file,
+};
 
 fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.VarMap) ![]const u8 {
     var expanded: std.ArrayList(u8) = .empty;
-    defer expanded.deinit(globals.init.arena.allocator());
+    // defer expanded.deinit(globals.init.arena.allocator());
 
     try expanded.ensureTotalCapacity(globals.init.arena.allocator(), input.len);
 
@@ -42,12 +47,13 @@ fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.Var
             }
 
             const var_name = input[start..end];
-            const value = vars.get(var_name);
+            var value = vars.get(var_name);
             if (value == null) {
-                try handle_undefined_var(input, rule_name, var_name, start, &expanded);
-            } else {
-                try expanded.appendSlice(globals.init.arena.allocator(), value.?);
+                value = try handle_undefined_var(input, rule_name, var_name, start);
             }
+
+            try expanded.appendSlice(globals.init.arena.allocator(), value.?);
+
             i = end - 1;
             continue;
         }
@@ -57,46 +63,32 @@ fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.Var
     return try expanded.toOwnedSlice(globals.init.arena.allocator());
 }
 
-fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name: []const u8, var_start_point: usize, expanded_arr_list: *std.ArrayList(u8)) !void {
-    // handle builtin variables
-    if (std.ascii.startsWithIgnoreCase(var_name, "builtin_")) {
-        if (std.ascii.eqlIgnoreCase(var_name[8..], "date")) {
-            var time: _c.time_t = _c.time(null);
-            const tm = _c.localtime(&time).?;
-            var buf: [9]u8 = undefined;
+fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name: []const u8, var_start_point: usize) ![]u8 {
+    const builtin_var = builtins.get_variables(var_name) orelse {
+        var buf: [256]u8 = undefined;
+        const w = std.fmt.bufPrint(&buf, "undefined variable in rule '{s}': ", .{rule_name}) catch "";
 
-            const date = try std.fmt.bufPrint(&buf, "{d:0>2}-{d:0>2}-{d:0>2}", .{
-                @as(u32, @intCast(tm.*.tm_mday)),
-                @as(u32, @intCast(tm.*.tm_mon + 1)),
-                @as(u32, @intCast(@mod(tm.*.tm_year + 1900, 100)))
-            });
-            try expanded_arr_list.appendSlice(globals.init.arena.allocator(), date);
-            return;
-        }
-    }
+        const var_pos = 14 + w.len + var_start_point - 1; // var_pos = 14 (len of syntax error prefix) + w.len + start pos of the variable - 1 = pos of "$variable_name"
+        const spaces = [_]u8{' '} ** 512;
+        const tildes = [_]u8{'~'} ** 128;
 
-    var buf: [256]u8 = undefined;
-    const w = std.fmt.bufPrint(&buf, "undefined variable in rule '{s}': ", .{rule_name}) catch "";
-
-    const var_pos = 14 + w.len + var_start_point - 1; // caret_pos = 14 (len of syntax error prefix) + w.len + start pos of the variable - 1 = pos of "$variable_name"
-    const spaces = [_]u8{' '} ** 512;
-    const tildes = [_]u8{'~'} ** 128;
-
-    logger.out(.syntax, null, "{s}{s}", .{ w, full_input });
+        logger.out(.syntax, null, "{s}{s}", .{ w, full_input });
                 
-    // pad with spaces so '^' aligns at var_pos
-    logger.out(.info, null, "{s}" ++ logger.ansi.red ++ "^{s}" ++ logger.ansi.reset, .{spaces[0..@min(var_pos, spaces.len)], tildes[0..@min(var_name.len, tildes.len)]});
-    return error.InvalidVar;
+        // pad with spaces so '^' aligns at var_pos
+        logger.out(.info, null, "{s}" ++ logger.color.red ++ "^{s}" ++ logger.color.reset, .{spaces[0..@min(var_pos, spaces.len)], tildes[0..@min(var_name.len, tildes.len)]});
+        return error.InvalidVar;
+    };
+
+    return builtin_var;
 }
 
-pub fn run_build_rule(ast: []const parser.Ast, config: cli.Config, prs: parser.Parser) !void {
+pub fn run_build_rule(ast: []const parser.Ast, config: Config, prs: parser.Parser) !void {
     const rule = config.rule_name orelse prs.default_rule orelse {
         logger.out(.err, null, "no build rule selected", .{});
         return error.InvalidRule;
     };
 
     var vars = try parser.Ast.make_var_map(ast);
-    defer vars.deinit(globals.init.arena.allocator());
 
     for (ast) |node| {
         switch (node) {
@@ -108,11 +100,11 @@ pub fn run_build_rule(ast: []const parser.Ast, config: cli.Config, prs: parser.P
                     return;
                 }
 
-                logger.out(.info, null, "executing build rule: '{s}'", .{rule});
+                logger.out(.info, null, logger.color.bold ++ "executing build rule: '{s}'" ++ logger.color.reset ++ "{s}{s}", .{rule, if (config.no_expand) " [noexpand]" else "",
+                    if (config.dry_run) " [dryrun]" else ""});
 
                 for (r.cmds) |cmd| {
-                    const expanded = try expand_vars(cmd, rule, &vars);
-
+                    const expanded = if (!config.no_expand) try expand_vars(cmd, rule, &vars) else cmd;
 
                     const exit_code = execute_cmd(expanded, config.dry_run) catch |e| {
                         logger.out(.err, null, "execution failed: {s}", .{@errorName(e)});
@@ -120,8 +112,7 @@ pub fn run_build_rule(ast: []const parser.Ast, config: cli.Config, prs: parser.P
                     };
 
                     if (exit_code != 0) {
-                        logger.out(.err, null, "command exited with code {d}", .{exit_code});
-                        return error.ExecutionError;
+                        logger.out(.warning, null, "command exited with code {d}", .{exit_code});
                     }
                 }
                 return;
@@ -140,7 +131,7 @@ fn execute_cmd(cmd: []const u8, dry_run: bool) !u8 {
     else
         [_][]const u8{ "sh", "-c", cmd };
 
-    logger.out(.info, null, "{s}{s}", .{cmd, if (dry_run) " [dry run]" else ""});
+    logger.out(.info, null, "{s}", .{cmd});
 
     if (dry_run)
         return 0;

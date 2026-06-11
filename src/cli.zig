@@ -1,12 +1,8 @@
 const std = @import("std");
 const globals = @import("globals.zig");
 const logger = @import("logger.zig");
-
-pub const Config = struct {
-    dry_run: bool = false,
-    threads: u8 = 1,
-    rule_name: ?[]const u8 = null,
-};
+const builtin = @import("builtin");
+const runner = @import("runner.zig");
 
 pub const Actions = enum {
     Run,
@@ -15,25 +11,18 @@ pub const Actions = enum {
     List,
 };
 
-pub const Args = struct {
-    config: Config = .{},
+pub const ParsedArgs = struct {
+    config: runner.Config = .{},
     action: Actions = .Run,
 };
 
-fn to_lower(s: []u8) []u8 {
-    for (s) |*c| {
-        c.* = std.ascii.toLower(c.*);
-    }
-    return s;
-}
-
-pub fn handle_args() !Args {
-    var res = Args{};
+pub fn handle_args() !ParsedArgs {
+    var res = ParsedArgs{};
 
     const args = try globals.init.minimal.args.toSlice(globals.init.arena.allocator());
 
-    for (args) |a| {
-        logger.out(.debug, null, "{s}", .{a});
+    for (args, 0..) |a, i| {
+        logger.out(.debug, null, "argv[{d}]={s}", .{i, a});
     } 
 
     var i: usize = 1; // skip exe name
@@ -42,11 +31,14 @@ pub fn handle_args() !Args {
 
     res.config.rule_name = if (args[i][0] != '-') r: {
         defer i += 1;
-        break :r try globals.init.arena.allocator().dupe(u8, args[i]);
+        break :r args[i];
     } else null;
 
     while (i < args.len) : (i += 1) {
         const arg = args[i];
+
+        if (arg.len < 2 or arg[0] != '-')
+            return cli_error(error.InvalidFlag, "invalid flag '{s}'", .{arg});
 
         if (res.config.rule_name == null) {
             if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
@@ -61,34 +53,23 @@ pub fn handle_args() !Args {
             }
         }
 
-        if (arg.len < 2 or arg[0] != '-') {
-            logger.out(.err, null, "invalid flag: '{s}'", .{arg});
-            return error.InvalidFlag;
-        }
+        if (std.mem.eql(u8, arg, "--dry") or std.mem.eql(u8, arg, "-d")) {
+            res.config.dry_run = true;
+        } else if (std.mem.eql(u8, arg, "--noexpand")) {
+            res.config.no_expand = true;
+        } else if (std.mem.eql(u8, arg, "--file") or std.mem.eql(u8, arg, "-f")) {
+            if (i + 1 >= args.len)
+                return cli_error(error.FlagMissingValue, "flag '{s}' is missing a value", .{arg});
 
-        for (arg[1..], 1..) |c, j| {
-            switch (c) {
-                'd' => res.config.dry_run = true,
-                't' => {
-                    if (j + 1 >= arg.len) {
-                        logger.out(.err, null, "flag '-{c}' is missing a value", .{c});
-                        return error.InvalidFlag;
-                    }
-
-                    const threads_str = arg[j + 1..];
-                    res.config.threads = std.fmt.parseInt(u8, threads_str, 10) catch res: {
-                        logger.out(.warning, null, "ignoring thread count '{s}' because it's greater than {d} or not a number", .{threads_str, std.math.maxInt(u8)});
-                        break :res 1;
-                    };
-                    break;
-                },
-                else => {
-                    logger.out(.err, null, "invalid flag: '{s}'", .{arg[j..]});
-                    return error.InvalidFlag;
-                },
-            }
-        }
+            i += 1;
+            res.config.build_file = args[i];
+        } else return cli_error(error.InvalidFlag, "invalid flag '{s}'", .{arg});
     }
 
     return res;
+}
+
+inline fn cli_error(comptime err: anyerror, comptime fmt: []const u8, args: anytype) anyerror {
+    logger.out(.err, null, fmt, args);
+    return err;
 }

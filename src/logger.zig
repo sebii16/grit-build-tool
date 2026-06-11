@@ -10,7 +10,7 @@ pub const LogLevel = enum {
     syntax,
 };
 
-pub const ansi = struct {
+pub const color = struct {
     pub const reset = "\x1b[0m";
     pub const bold = "\x1b[1m";
     pub const red = "\x1b[31m";
@@ -21,24 +21,24 @@ pub const ansi = struct {
 pub fn out(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytype) void {
     if (level == .debug and builtin.mode != .Debug) return;
 
-    var sink = if (level == .info or level == .warning)
+    var sink = if (level == .err or level == .warning)
         std.Io.File.stdout().writer(globals.init.io, &.{})
     else
         std.Io.File.stderr().writer(globals.init.io, &.{});
 
     const prefix = switch (level) {
         .info => "",
-        .warning => ansi.yellow ++ ansi.bold ++ "warning: " ++ ansi.reset,
-        .err => ansi.red ++ ansi.bold ++ "error: " ++ ansi.reset,
-        .syntax => ansi.red ++ ansi.bold ++ "syntax error: " ++ ansi.reset,
-        .debug => ansi.magenta ++ ansi.bold ++ "debug: " ++ ansi.reset,
+        .warning => color.yellow ++ color.bold ++ "warning: " ++ color.reset,
+        .err => color.red ++ color.bold ++ "error: " ++ color.reset,
+        .syntax => color.red ++ color.bold ++ "syntax error: " ++ color.reset,
+        .debug => color.magenta ++ color.bold ++ "debug: " ++ color.reset,
     };
 
     var buf: [1024]u8 = undefined;
-    const w = if (level == .syntax and line != null)
+    const w = if (line != null)
         std.fmt.bufPrint(
             &buf,
-            ansi.bold ++ "{s}:{d}" ++ ansi.reset ++ ": {s}" ++ fmt ++ "\n",
+            color.bold ++ "{s}:{d}" ++ color.reset ++ ": {s}" ++ fmt ++ "\n",
             .{ globals.default_build_file, line.?, prefix } ++ args,
         ) catch return
     else

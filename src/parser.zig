@@ -20,30 +20,19 @@ pub const Ast = union(enum) {
     VarDecl: Var,
     RuleDecl: Rule,
 
-    pub fn cleanup(self: Ast) void {
-        switch (self) {
-            .RuleDecl => |r| globals.init.arena.allocator().free(r.cmds),
-            .VarDecl => {},
-        }
-    }
-
     pub fn make_var_map(self: []const Ast) !VarMap {
         var vars: VarMap = .{};
 
         var count: u32 = 0;
-        for (self) |n| {
-            if (n == .VarDecl) count += 1;
-        }
+        for (self) |n| switch (n) { .VarDecl => count += 1, else => {} };
 
         try vars.ensureTotalCapacity(globals.init.arena.allocator(), count);
-
-        // errdefer vars.deinit(allocator);
 
         for (self) |n| {
             switch (n) {
                 .VarDecl => |v| {
                  if (vars.contains(v.name)) {
-                      logger.out(.syntax, null, "variable '{s}' redefined", .{v.name});
+                    logger.out(.syntax, null, "variable '{s}' redefined", .{v.name});
                      return error.DuplicateVar;
                   }
                  vars.putAssumeCapacity(v.name, v.value);
@@ -54,7 +43,7 @@ pub const Ast = union(enum) {
     
      return vars;
     }
-    };
+};
 
 pub const Parser = struct {
     lexer: lexer.Lexer,
@@ -63,12 +52,6 @@ pub const Parser = struct {
 
     pub fn parse_all(self: *Parser) ![]Ast {
         var nodes: std.ArrayList(Ast) = .empty;
-        errdefer {
-            for (nodes.items) |n| {
-                n.cleanup();
-            }
-            nodes.deinit(globals.init.arena.allocator());
-        }
 
         var pending_default = false;
         try self.next_token();
@@ -95,6 +78,7 @@ pub const Parser = struct {
                             try self.expect(.TOK_STRING);
 
                             const str = self.curr.value;
+                            logger.out(.debug, self.lexer.curr_line, "found variable declaration {s}={s}", .{name, str});
                             try self.next_token();
 
                             try nodes.append(globals.init.arena.allocator(), Ast{ .VarDecl = .{ .name = name, .value = str } });
@@ -108,9 +92,6 @@ pub const Parser = struct {
                             try self.next_token();
 
                             var cmds: std.ArrayList([]const u8) = .empty;
-                            errdefer {
-                                cmds.deinit(globals.init.arena.allocator());
-                            }
 
                             while (self.curr.type != .TOK_RBRACE) {
                                 if (self.curr.type == .TOK_EOF) {
@@ -121,6 +102,7 @@ pub const Parser = struct {
                                 switch (self.curr.type) {
                                     .TOK_STRING => {
                                         const cmd = self.curr.value;
+                                        logger.out(.debug, self.lexer.curr_line, "found cmd declaration {s} in rule {s}", .{cmd, name});
                                         try cmds.append(globals.init.arena.allocator(), cmd);
                                     },
                                     .TOK_ANNOTATION => {

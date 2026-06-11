@@ -15,7 +15,7 @@ pub const TokenType = enum {
     TOK_LPAREN,
     TOK_RPAREN,
     TOK_COMMA,
-    TOK__INVALID,
+    TOK__INVALID
 };
 
 pub const Token = struct {
@@ -59,7 +59,7 @@ pub const Lexer = struct {
                     if (std.ascii.isAlphanumeric(c) or c == '_') {
                         return make_ident_token(self);
                     } else {
-                        logger.out(.syntax, self.curr_line, "unexpected character: {c}", .{c});
+                        logger.out(.syntax, self.curr_line, "unexpected {s}", .{if (c > 127) "non-ASCII character" else "character '" ++ [_]u8{c} ++ "'"});
                         return error.UnexpectedCharacter;
                     }
                 },
