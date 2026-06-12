@@ -32,7 +32,7 @@ pub const Ast = union(enum) {
             switch (n) {
                 .VarDecl => |v| {
                  if (vars.contains(v.name)) {
-                    logger.out(.syntax, null, "variable '{s}' redefined", .{v.name});
+                    logger.out_adv(.syntax, null, "variable '{s}' redefined", .{v.name});
                      return error.DuplicateVar;
                   }
                  vars.putAssumeCapacity(v.name, v.value);
@@ -66,7 +66,7 @@ pub const Parser = struct {
                     switch (self.curr.type) {
                         .TOK_EQ => {
                             if (pending_default) {
-                                logger.out(
+                                logger.out_adv(
                                     .syntax,
                                     self.lexer.curr_line,
                                     "@default cannot be called here",
@@ -78,7 +78,7 @@ pub const Parser = struct {
                             try self.expect(.TOK_STRING);
 
                             const str = self.curr.value;
-                            logger.out(.debug, self.lexer.curr_line, "found variable declaration {s}={s}", .{name, str});
+                            logger.out_adv(.debug, self.lexer.curr_line, "found variable declaration {s}={s}", .{name, str});
                             try self.next_token();
 
                             try nodes.append(globals.init.arena.allocator(), Ast{ .VarDecl = .{ .name = name, .value = str } });
@@ -95,29 +95,29 @@ pub const Parser = struct {
 
                             while (self.curr.type != .TOK_RBRACE) {
                                 if (self.curr.type == .TOK_EOF) {
-                                    logger.out(.syntax, self.lexer.curr_line, "expected '}}' got 'EOF'", .{});
+                                    logger.out_adv(.syntax, self.lexer.curr_line, "expected '}}' got 'EOF'", .{});
                                     return error.SyntaxError;
                                 }
 
                                 switch (self.curr.type) {
                                     .TOK_STRING => {
                                         const cmd = self.curr.value;
-                                        logger.out(.debug, self.lexer.curr_line, "found cmd declaration {s} in rule {s}", .{cmd, name});
+                                        logger.out_adv(.debug, self.lexer.curr_line, "found cmd declaration {s} in rule {s}", .{cmd, name});
                                         try cmds.append(globals.init.arena.allocator(), cmd);
                                     },
                                     .TOK_ANNOTATION => {
-                                        logger.out(.debug, self.lexer.curr_line, "annotation: {s}", .{self.curr.value});
+                                        logger.out_adv(.debug, self.lexer.curr_line, "annotation: {s}", .{self.curr.value});
                                         if (std.mem.eql(u8, self.curr.value, "seq")) {
-                                            logger.out(.debug, self.lexer.curr_line, "sequential enabled", .{});
+                                            logger.out_adv(.debug, self.lexer.curr_line, "sequential enabled", .{});
                                         } else if (std.mem.eql(u8, self.curr.value, "par")) {
-                                            logger.out(.debug, self.lexer.curr_line, "parallel enabled", .{});
+                                            logger.out_adv(.debug, self.lexer.curr_line, "parallel enabled", .{});
                                         } else {
-                                            logger.out(.syntax, self.lexer.curr_line, "unknown annotation '@{s}'", .{self.curr.value});
+                                            logger.out_adv(.syntax, self.lexer.curr_line, "unknown annotation '@{s}'", .{self.curr.value});
                                             return error.SyntaxError;
                                         }
                                     },
                                     else => {
-                                        logger.out(.syntax, self.lexer.curr_line, "unexpected token: '{s}'", .{@tagName(self.curr.type)}); 
+                                        logger.out_adv(.syntax, self.lexer.curr_line, "unexpected token: '{s}'", .{@tagName(self.curr.type)}); 
                                         return error.SyntaxError;
                                     }
                                 }
@@ -132,19 +132,19 @@ pub const Parser = struct {
                             });
                         },
                         else => {
-                            logger.out(.syntax, self.lexer.curr_line, "expected '=' or '{{' got {s}", .{@tagName(self.curr.type)});
+                            logger.out_adv(.syntax, self.lexer.curr_line, "expected '=' or '{{' got {s}", .{@tagName(self.curr.type)});
                             return error.SyntaxError;
                         },
                     }
                 },
                 .TOK_ANNOTATION => {
                     if (!std.mem.eql(u8, self.curr.value, "default")) {
-                        logger.out(.syntax, self.lexer.curr_line, "unknown annotation: '@{s}'", .{self.curr.value});
+                        logger.out_adv(.syntax, self.lexer.curr_line, "unknown annotation: '@{s}'", .{self.curr.value});
                         return error.SyntaxError;
                     }
 
                     if (self.default_rule != null or pending_default == true) {
-                        logger.out(.syntax, self.lexer.curr_line, "@default can only be called once", .{});
+                        logger.out_adv(.syntax, self.lexer.curr_line, "@default can only be called once", .{});
                         return error.SyntaxError;
                     }
 
@@ -152,14 +152,14 @@ pub const Parser = struct {
                     try self.next_token();
                 },
                 else => {
-                    logger.out(.syntax, self.lexer.curr_line, "unexpected token: '{s}'", .{@tagName(self.curr.type)});
+                    logger.out_adv(.syntax, self.lexer.curr_line, "unexpected token: '{s}'", .{@tagName(self.curr.type)});
                     return error.SyntaxError;
                 },
             }
         }
 
         if (pending_default) {
-            logger.out(.syntax, self.lexer.curr_line, "no rule found after @default", .{});
+            logger.out_adv(.syntax, self.lexer.curr_line, "no rule found after @default", .{});
             return error.SyntaxError;
         }
 
@@ -178,7 +178,7 @@ pub const Parser = struct {
 
     fn expect(self: *Parser, t: lexer.TokenType) !void {
         if (self.curr.type != t) {
-            logger.out(.syntax, self.lexer.curr_line, "expected '{s}', got '{s}'", .{ @tagName(t), @tagName(self.curr.type) });
+            logger.out_adv(.syntax, self.lexer.curr_line, "expected '{s}', got '{s}'", .{ @tagName(t), @tagName(self.curr.type) });
             return error.SyntaxError;
         }
     }

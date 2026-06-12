@@ -25,10 +25,3 @@ install {
   "copy $OUT.exe c:\grit"
   "copy LICENSE c:\grit"
 }
-
-test {
-  "echo $builtin_date"
-  "echo $builtin_time"
-  "echo $builtin_os"
-  "echo $builtin_arch"
-}

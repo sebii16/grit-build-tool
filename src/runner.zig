@@ -72,10 +72,10 @@ fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name:
         const spaces = [_]u8{' '} ** 512;
         const tildes = [_]u8{'~'} ** 128;
 
-        logger.out(.syntax, null, "{s}{s}", .{ w, full_input });
+        logger.out_adv(.syntax, null, "{s}{s}", .{ w, full_input });
                 
         // pad with spaces so '^' aligns at var_pos
-        logger.out(.info, null, "{s}" ++ logger.color.red ++ "^{s}" ++ logger.color.reset, .{spaces[0..@min(var_pos, spaces.len)], tildes[0..@min(var_name.len, tildes.len)]});
+        logger.out("{s}^{s}", .{spaces[0..@min(var_pos, spaces.len)], tildes[0..@min(var_name.len, tildes.len)]});
         return error.InvalidVar;
     };
 
@@ -84,7 +84,7 @@ fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name:
 
 pub fn run_build_rule(ast: []const parser.Ast, config: Config, prs: parser.Parser) !void {
     const rule = config.rule_name orelse prs.default_rule orelse {
-        logger.out(.err, null, "no build rule selected", .{});
+        logger.out_adv(.err, null, "no build rule selected", .{});
         return error.InvalidRule;
     };
 
@@ -96,23 +96,23 @@ pub fn run_build_rule(ast: []const parser.Ast, config: Config, prs: parser.Parse
                 if (!std.mem.eql(u8, r.name, rule)) continue;
 
                 if (r.cmds.len == 0) {
-                    logger.out(.warning, null, "build rule '{s}' is empty", .{r.name});
+                    logger.out_adv(.warning, null, "build rule '{s}' is empty", .{r.name});
                     return;
                 }
 
-                logger.out(.info, null, logger.color.bold ++ "executing build rule: '{s}'" ++ logger.color.reset ++ "{s}{s}", .{rule, if (config.no_expand) " [noexpand]" else "",
+                logger.out("executing build rule: '{s}'{s}{s}", .{rule, if (config.no_expand) " [noexpand]" else "",
                     if (config.dry_run) " [dryrun]" else ""});
 
                 for (r.cmds) |cmd| {
                     const expanded = if (!config.no_expand) try expand_vars(cmd, rule, &vars) else cmd;
 
                     const exit_code = execute_cmd(expanded, config.dry_run) catch |e| {
-                        logger.out(.err, null, "execution failed: {s}", .{@errorName(e)});
+                        logger.out_adv(.err, null, "execution failed: {s}", .{@errorName(e)});
                         return e;
                     };
 
                     if (exit_code != 0) {
-                        logger.out(.warning, null, "command exited with code {d}", .{exit_code});
+                        logger.out_adv(.warning, null, "command exited with code {d}", .{exit_code});
                     }
                 }
                 return;
@@ -121,7 +121,7 @@ pub fn run_build_rule(ast: []const parser.Ast, config: Config, prs: parser.Parse
         }
     }
 
-    logger.out(.err, null, "build rule '{s}' doesn't exist.", .{rule});
+    logger.out_adv(.err, null, "build rule '{s}' doesn't exist.", .{rule});
     return error.InvalidRule;
 }
 
@@ -131,7 +131,7 @@ fn execute_cmd(cmd: []const u8, dry_run: bool) !u8 {
     else
         [_][]const u8{ "sh", "-c", cmd };
 
-    logger.out(.info, null, "{s}", .{cmd});
+    logger.out("{s}", .{cmd});
 
     if (dry_run)
         return 0;

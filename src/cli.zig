@@ -22,17 +22,17 @@ pub fn handle_args() !ParsedArgs {
     const args = try globals.init.minimal.args.toSlice(globals.init.arena.allocator());
 
     for (args, 0..) |a, i| {
-        logger.out(.debug, null, "argv[{d}]={s}", .{i, a});
+        logger.out_adv(.debug, null, "argv[{d}]={s}", .{i, a});
     } 
 
     var i: usize = 1; // skip exe name
 
     if (i + 1 > args.len) return res;
 
-    res.config.rule_name = if (args[i][0] != '-') r: {
+    if (args[i][0] != '-') {
         defer i += 1;
-        break :r args[i];
-    } else null;
+        res.config.rule_name = args[i];
+    }
 
     while (i < args.len) : (i += 1) {
         const arg = args[i];
@@ -59,7 +59,7 @@ pub fn handle_args() !ParsedArgs {
             res.config.no_expand = true;
         } else if (std.mem.eql(u8, arg, "--file") or std.mem.eql(u8, arg, "-f")) {
             if (i + 1 >= args.len)
-                return cli_error(error.FlagMissingValue, "flag '{s}' is missing a value", .{arg});
+                return cli_error(error.FlagMissingValue, "please specify a file after '{s}'", .{arg});
 
             i += 1;
             res.config.build_file = args[i];
@@ -70,6 +70,6 @@ pub fn handle_args() !ParsedArgs {
 }
 
 inline fn cli_error(comptime err: anyerror, comptime fmt: []const u8, args: anytype) anyerror {
-    logger.out(.err, null, fmt, args);
+    logger.out_adv(.err, null, fmt, args);
     return err;
 }
