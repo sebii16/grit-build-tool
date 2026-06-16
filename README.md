@@ -59,12 +59,12 @@ Parallel and sequential blocks can be mixed inside a rule.
 **Example:**
 
 ```sh
-release {
+clean {
     @parallel
-    "cc -c main.c -o build\main.obj"
-    "cc -c utils.c -o build\utils.obj"
+    "rm -f *.exe"
+    "rm -f *.pdb"
     @sequential
-    "link build\*.obj /OUT:build\app.exe"
+    'echo "all clean"'
 }
 ```
 
