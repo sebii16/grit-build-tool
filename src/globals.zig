@@ -31,6 +31,7 @@ pub const help_msg =
     \\  --noexpand      Disable variable expansion.
     \\  -f, --file      Specify the build file.
     \\  -r, --rule      Specify the build rule.
+    \\  -t, --threads   Specify the max. amount of threads (default = CPU core count).
     \\  --ignore-errors Ignore execution errors.
     \\  --no-colors     Disable colors.
     \\
