@@ -4,6 +4,7 @@ DEBUG_FLAGS = "-O Debug -freference-trace=10 -lc" # -Dsanitize=address"
 RELEASE_FLAGS = "-O ReleaseSmall -fstrip -lc"
 
 clean {
+  @parallel
   "rm -f *.exe"
   "rm -f *.pdb"
   "rm -f $OUT"
@@ -16,6 +17,10 @@ debug {
 
 release {
   "zig build-exe $FILES -femit-bin=$OUT.exe $RELEASE_FLAGS"
+}
+
+linux {
+	"zig build-exe $FILES -femit-bin=$OUT $RELEASE_FLAGS -target x86_64-linux"
 }
 
 install {

@@ -11,13 +11,12 @@ pub fn run_commands(items: []const []const u8, config: *const runner.Config) !vo
 
     const gpa = globals.init.gpa;
 
-    logger.out_adv(true, .debug, null, "batch size: {d}", .{items.len});
-    for (items, 0..) |cmd, i| {
-        logger.out_adv(true, .debug, null, "[{d}] {s}", .{ i, cmd });
-        logger.out(.info, "{s}", .{cmd});
+    if (config.dry_run) {
+        for (items) |item| {
+            logger.out(.info, "{s}", .{item});
+        }
+        return;
     }
-
-    if (config.dry_run) return;
 
     const thread_count = @min(config.threads.?, items.len);
     const threads = try gpa.alloc(std.Thread, thread_count);
@@ -39,21 +38,25 @@ pub fn run_commands(items: []const []const u8, config: *const runner.Config) !vo
         index += batch_size;
     }
 
-    if (cmd_failed.load(.monotonic) and !config.ignore_errors)
+    if (cmd_failed.load(.monotonic) and !config.ignore_errors) {
+        logger.out(.err, "command failed. stopping", .{});
         return error.CommandFailed;
+    }
 }
 
 fn worker(cmd: []const u8, needs_lock: bool) void {
     const gpa = globals.init.gpa;
-    const res = create_process(cmd) catch |e| {
-        if (needs_lock)
-            logger.out_locked(.err, "command failed: {s}", .{@errorName(e)})
-        else
-            logger.out(.err, "command failed: {s}", .{@errorName(e)});
 
+    if (needs_lock)
+        logger.out_locked(.info, "{s}", .{cmd})
+    else
+        logger.out(.info, "{s}", .{cmd});
+
+    const res = create_process(cmd) catch {
         cmd_failed.store(true, .monotonic);
         return;
     };
+
     defer gpa.free(res.stdout);
     defer gpa.free(res.stderr);
 

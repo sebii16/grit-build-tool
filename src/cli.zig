@@ -80,6 +80,8 @@ pub fn parse_args() !ParsedArgs {
             res.config.threads = if (thread_count > 0) thread_count else null;
         } else if (cmp(arg, "--ignore-errors")) {
             res.config.ignore_errors = true;
+        } else if (cmp(arg, "--no-colors")) {
+            logger.Config.current.colors_enabled = false;
         } else return cli_error(error.InvalidFlag, "invalid flag '{s}'", .{arg});
     }
 

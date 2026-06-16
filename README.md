@@ -2,6 +2,10 @@
 
 **Grit is a simple build automation tool inspired by Make. It is currently still early in development - for now it supports simple variable expansion, parallel and sequential command execution and a few extra features described below.**
 
+> [!NOTE]
+> Grit is currently experimental and under active development.
+> Build file syntax and general behavior may change between releases.
+
 ## Installation
 
 ### Option 1 - Build it yourself
@@ -30,18 +34,18 @@ To get a literal `$`, write `$$`.
 
 Disable expansion completely by using the `--noexpand` flag.
 
-### Quotes
+### Strings
 
-Commands have to be wrapped in quotes like this:
+Commands and variables have to be strings and wrapped in quotes like this:
 
 ```sh
-"this tool is called 'grit'"
+"Hello World!"
 ```
 
 or to use double quotes inside strings:
 
 ```sh
-'this tool is called "grit"'
+'This tool is called "grit"!'
 ```
 
 ### Annotations
@@ -112,7 +116,8 @@ Build flags:
 --noexpand      Disable variable expansion.
 -f, --file      Specify the build file.
 -r, --rule      Specify the build rule.
---ignore-errors Treat execution errors as warnings.
+--ignore-errors Ignore execution errors.
+--no-colors     Disable colors.
 
 Global flags: 
 -h, --help      Show help message.
@@ -123,7 +128,3 @@ Global flags:
 ## License
 
 Grit is licensed under the **[MIT License](LICENSE)**.
-
-> [!NOTE]
-> Grit is currently experimental and under active development.
-> Build file syntax and general behavior may change between releases.

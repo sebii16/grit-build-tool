@@ -16,7 +16,6 @@ pub const Config = struct {
     is_inited: bool = false,
 
     colors_enabled: bool = false,
-    default_level: LogLevel = .info,
     build_file: []const u8 = "",
 };
 

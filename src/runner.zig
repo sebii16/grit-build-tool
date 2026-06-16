@@ -124,12 +124,13 @@ pub fn run_build_rule(ast: []const parser.Ast, config: *Config, prs: *const pars
                     return;
                 }
 
-                logger.out(.info, "executing build rule {s}'{s}'{s}{s}{s}", .{
+                logger.out(.info, "executing build rule {s}'{s}'{s}{s}{s}{s}", .{
                     color.get(color.bold),
                     rule,
                     color.get(color.reset),
                     if (config.no_expand) " [noexpand]" else "",
-                    if (config.dry_run) " [dryrun]" else ""
+                    if (config.dry_run) " [dryrun]" else "",
+                    if (config.ignore_errors) " [ignore-errors]" else ""
                 });
 
                 for (r.steps) |step| {
