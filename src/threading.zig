@@ -4,6 +4,8 @@ const runner = @import("runner.zig");
 const logger = @import("logger.zig");
 const globals = @import("globals.zig");
 
+var cmd_failed: std.atomic.Value(bool) = .init(false);
+
 pub fn run_commands(items: []const []const u8, config: *const runner.Config) !void {
     if (items.len == 0) return;
 
@@ -36,27 +38,43 @@ pub fn run_commands(items: []const []const u8, config: *const runner.Config) !vo
 
         index += batch_size;
     }
+
+    if (cmd_failed.load(.monotonic) and !config.ignore_errors)
+        return error.CommandFailed;
 }
 
 fn worker(cmd: []const u8, needs_lock: bool) void {
+    const gpa = globals.init.gpa;
     const res = create_process(cmd) catch |e| {
         if (needs_lock)
             logger.out_locked(.err, "command failed: {s}", .{@errorName(e)})
         else
             logger.out(.err, "command failed: {s}", .{@errorName(e)});
 
+        cmd_failed.store(true, .monotonic);
         return;
     };
-    defer globals.init.gpa.free(res);
+    defer gpa.free(res.stdout);
+    defer gpa.free(res.stderr);
+
+    const failed = switch (res.term) {
+        .exited => |code| code != 0,
+        else => true,
+    };
+    
+    if (failed) cmd_failed.store(true, .monotonic);
+
+    const output = std.mem.concat(gpa, u8, &.{res.stdout, res.stderr}) catch return;
+    defer gpa.free(output);
 
     if (needs_lock) {
         logger.log_mutex.lock(globals.init.io) catch return;
-        defer logger.log_mutex.unlock(globals.init.io);
     }
-    logger.stdout.interface.writeAll(res) catch return;
+    defer if (needs_lock) logger.log_mutex.unlock(globals.init.io);
+    logger.stdout.interface.writeAll(output) catch return;
 }
 
-fn create_process(cmd: []const u8) ![]u8 {
+fn create_process(cmd: []const u8) !std.process.RunResult {
     const gpa = globals.init.gpa;
 
     const args = if (builtin.target.os.tag == .windows)
@@ -64,9 +82,5 @@ fn create_process(cmd: []const u8) ![]u8 {
     else
         [_][]const u8{ "sh", "-c", cmd };
 
-    const result = try std.process.run(gpa, globals.init.io, .{ .argv = &args });
-    defer gpa.free(result.stdout);
-    defer gpa.free(result.stderr);
-
-    return std.mem.concat(gpa, u8, &.{ result.stderr, result.stdout });
+    return try std.process.run(gpa, globals.init.io, .{ .argv = &args });
 }
