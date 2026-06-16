@@ -1,6 +1,6 @@
 # Grit
 
-**Grit is a simple build automation tool inspired by Make. It is currently still far from being finished and only supports simple variable expansion and command execution and a few extra features you can learn more about down below.**
+**Grit is a simple build automation tool inspired by Make. It is currently still early in development - for now it supports simple variable expansion, parallel and sequential command execution and a few extra features described below.**
 
 ## Installation
 
@@ -14,9 +14,61 @@ zig build-exe src/main.zig -O ReleaseSmall -lc
 > [!IMPORTANT]
 > Grit requires Zig 0.16.0. Other versions are currently unsupported.
 
-## Example
+## Build files
 
-`build.grit`
+**A build file (`build.grit` by default) is a list of variable declarations and rules. Each rule can hold one or more commands to run.**
+
+### Comments
+
+Lines starting with `#` are comments and ignored.
+
+### Variable declarations and expansion
+
+Declare variables with `NAME = "value"` and expand them inside commands with `$NAME`.
+
+To get a literal `$`, write `$$`.
+
+Disable expansion completely by using the `--noexpand` flag.
+
+### Quotes
+
+Commands have to be wrapped in quotes like this:
+
+```sh
+"this tool is called 'grit'"
+```
+
+or to use double quotes inside strings:
+
+```sh
+'this tool is called "grit"'
+```
+
+### Annotations
+
+Annotations start with `@` and modify how following commands or rules behave.
+
+| Annotation     | Effect                                                                 |
+| -------------- | ---------------------------------------------------------------------- |
+| `@default`     | Marks the next rule as the default.   |
+| `@parallel`    | Commands after this run parallel to each other, until `@sequential`.             |
+| `@sequential`  | Commands after this run one at a time (default).                   |
+
+Parallel and sequential blocks can be mixed inside a rule.
+
+**Example:**
+
+```sh
+release {
+    @parallel
+    "cc -c main.c -o build\main.obj"
+    "cc -c utils.c -o build\utils.obj"
+    @sequential
+    "link build\*.obj /OUT:build\app.exe"
+}
+```
+
+## Example
 
 ```sh
 # Variable declarations
@@ -30,9 +82,11 @@ build {
     "zig build-exe $SRC -femit-bin=$OUT $FLAGS"
 }
 
-# 2nd rule
-other_rule {
-    'echo "Hello world"'
+# Another rule with multiple commands
+clean {
+    @parallel
+    "rm -f *.exe"
+    "rm -f *.pdb"
 }
 ```
 
@@ -45,13 +99,19 @@ grit
 **Run a different rule:**
 
 ```sh
-grit other_rule
+grit clean
 ```
 
 **Run a different build file:**
 
 ```sh
 grit -f file_name
+```
+
+**Run with a specific number of parallel threads:**
+
+```sh
+grit release -t 4
 ```
 
 ## Flags
@@ -69,6 +129,10 @@ Global flags:
 -v, --version   Show version and license information.
 -l, --list      List build rules.
 ```
+
+## License
+
+Grit is licensed under the **[MIT License](LICENSE)**.
 
 > [!NOTE]
 > Grit is currently experimental and under active development.
