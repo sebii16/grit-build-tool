@@ -56,18 +56,6 @@ Annotations start with `@` and modify how following commands or rules behave.
 
 Parallel and sequential blocks can be mixed inside a rule.
 
-**Example:**
-
-```sh
-clean {
-    @parallel
-    "rm -f *.exe"
-    "rm -f *.pdb"
-    @sequential
-    'echo "all clean"'
-}
-```
-
 ## Example
 
 ```sh
@@ -82,11 +70,13 @@ build {
     "zig build-exe $SRC -femit-bin=$OUT $FLAGS"
 }
 
-# Another rule with multiple commands
+# Another rule with multiple commands and parallel and sequential mode
 clean {
     @parallel
     "rm -f *.exe"
     "rm -f *.pdb"
+    @sequential
+    'echo "all clean"'
 }
 ```
 
