@@ -5,18 +5,18 @@ const c = @cImport({
 const globals = @import("globals.zig");
 const builtin = @import("builtin");
 
-pub fn get_variables(variable: []const u8) ?[]u8 {
+pub fn get_variables(variable: []const u8) ?[]const u8 {
     if (!std.mem.startsWith(u8, variable, "builtin_"))
         return null;
 
     return switch (std.meta.stringToEnum(enum { date, time, os, arch }, variable[8..]) orelse return null) {
         .date, .time => |t| get_date_time(@intFromEnum(t)),
-        .os => globals.init.arena.allocator().dupe(u8, @tagName(builtin.os.tag)) catch null,
-        .arch => globals.init.arena.allocator().dupe(u8, @tagName(builtin.cpu.arch)) catch null,
+        .os => @tagName(builtin.os.tag),
+        .arch => @tagName(builtin.cpu.arch),
     };
 }
 
-fn get_date_time(date_type: u8) ?[]u8 {
+fn get_date_time(date_type: u8) ?[]const u8 {
     var time: c.time_t = c.time(null);
     const tm = c.localtime(&time) orelse return null;
     var buf: [10]u8 = undefined;

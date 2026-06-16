@@ -2,7 +2,6 @@ FILES = "src/main.zig"
 OUT = "grit"
 DEBUG_FLAGS = "-O Debug -freference-trace=10 -lc" # -Dsanitize=address"
 RELEASE_FLAGS = "-O ReleaseSmall -fstrip -lc"
-BUILD_DATE = "src/build_date.txt"
 
 clean {
   "rm -f *.exe"
@@ -12,9 +11,7 @@ clean {
 
 @default
 debug {
-  "<nul set /p =$builtin_date> $BUILD_DATE"
   "zig build-exe $FILES -femit-bin=$OUT-d.exe $DEBUG_FLAGS"
-  "rm -f $BUILD_DATE"
 }
 
 release {
@@ -22,6 +19,11 @@ release {
 }
 
 install {
+  @parallel
   "copy $OUT.exe c:\grit"
   "copy LICENSE c:\grit"
+}
+
+error {
+  "$UNDEFINED variable"
 }

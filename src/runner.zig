@@ -5,16 +5,20 @@ const cli = @import("cli.zig");
 const builtin = @import("builtin");
 const globals = @import("globals.zig");
 const builtins = @import("builtins.zig");
+const threading = @import("threading.zig");
+const color = logger.Colors;
 
 pub const Config = struct {
+    build_file: []const u8 = globals.DEFAULT_BUILD_FILE,
     dry_run: bool = false,
     no_expand: bool = false,
-    //threads: u8 = 1,
+    threads: ?usize = null,
+    parallel: bool = false,
     rule_name: ?[]const u8 = null,
-    build_file: []const u8 = globals.default_build_file,
+    ignore_errors: bool = false,
 };
 
-fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.VarMap) ![]const u8 {
+fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.VarMap) ![]u8 {
     var expanded: std.ArrayList(u8) = .empty;
     // defer expanded.deinit(globals.init.arena.allocator());
 
@@ -26,8 +30,8 @@ fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.Var
     while (i < len) : (i += 1) {
         const c = input[i];
 
-        // dont expand if $ is escaped with \
-        if (c == '\\' and i + 1 < input.len and input[i + 1] == '$') {
+        // dont expand if $ is escaped
+        if (c == '$' and i + 1 < input.len and input[i + 1] == '$') {
             expanded.appendAssumeCapacity('$');
             i += 1;
             continue;
@@ -49,7 +53,7 @@ fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.Var
             const var_name = input[start..end];
             var value = vars.get(var_name);
             if (value == null) {
-                value = try handle_undefined_var(input, rule_name, var_name, start);
+                value = try handle_undefined_var(input, rule_name, var_name, start, end);
             }
 
             try expanded.appendSlice(globals.init.arena.allocator(), value.?);
@@ -63,86 +67,102 @@ fn expand_vars(input: []const u8, rule_name: []const u8, vars: *const parser.Var
     return try expanded.toOwnedSlice(globals.init.arena.allocator());
 }
 
-fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name: []const u8, var_start_point: usize) ![]u8 {
+fn handle_undefined_var(full_input: []const u8, rule_name: []const u8, var_name: []const u8, start: usize, end: usize) ![]const u8 {
     const builtin_var = builtins.get_variables(var_name) orelse {
-        var buf: [256]u8 = undefined;
-        const w = std.fmt.bufPrint(&buf, "undefined variable in rule '{s}': ", .{rule_name}) catch "";
+        logger.out(.syntax, "undefined variable in rule {s}'{s}'{s}:\n", .{ color.get(color.bold), rule_name, color.get(color.reset) });
 
-        const var_pos = 14 + w.len + var_start_point - 1; // var_pos = 14 (len of syntax error prefix) + w.len + start pos of the variable - 1 = pos of "$variable_name"
-        const spaces = [_]u8{' '} ** 512;
-        const tildes = [_]u8{'~'} ** 128;
+        logger.out(.info, "{s}", .{full_input});
 
-        logger.out_adv(.syntax, null, "{s}{s}", .{ w, full_input });
-                
-        // pad with spaces so '^' aligns at var_pos
-        logger.out("{s}^{s}", .{spaces[0..@min(var_pos, spaces.len)], tildes[0..@min(var_name.len, tildes.len)]});
+        if (start > 1) {
+            logger.out_adv(false, .info, null, "\x1b[{d}C", .{ start - 1});
+        }
+
+        logger.out(.info, "{s}^{s}{s}", .{
+            color.get(color.red),
+            ([_]u8{'~'} ** 128)[0..@min(end - start, 128)],
+            color.get(color.reset) 
+        });
+
         return error.InvalidVar;
     };
 
     return builtin_var;
 }
 
-pub fn run_build_rule(ast: []const parser.Ast, config: Config, prs: parser.Parser) !void {
+pub fn run_build_rule(ast: []const parser.Ast, config: *Config, prs: *const parser.Parser) !void {
     const rule = config.rule_name orelse prs.default_rule orelse {
-        logger.out_adv(.err, null, "no build rule selected", .{});
+        logger.out(.err, "no build rule selected", .{});
         return error.InvalidRule;
     };
 
-    var vars = try parser.Ast.make_var_map(ast);
+    const vars = try parser.Ast.make_var_map(ast);
+    var batch: std.ArrayList([]const u8) = .empty;
 
     for (ast) |node| {
         switch (node) {
             .RuleDecl => |r| {
                 if (!std.mem.eql(u8, r.name, rule)) continue;
 
-                if (r.cmds.len == 0) {
-                    logger.out_adv(.warning, null, "build rule '{s}' is empty", .{r.name});
+                var has_cmd = false;
+
+                for (r.steps) |step| {
+                    switch (step) {
+                        .cmd => {
+                            has_cmd = true;
+                            break;
+                        },
+                        .parallel => {},
+                    }
+                }
+
+                if (!has_cmd) {
+                    logger.out(.warning, "build rule {s}'{s}'{s} is empty", .{
+                        color.get(color.bold),
+                        r.name,
+                        color.get(color.reset)
+                    });
                     return;
                 }
 
-                logger.out("executing build rule: '{s}'{s}{s}", .{rule, if (config.no_expand) " [noexpand]" else "",
-                    if (config.dry_run) " [dryrun]" else ""});
+                logger.out(.info, "executing build rule {s}'{s}'{s}{s}{s}", .{
+                    color.get(color.bold),
+                    rule,
+                    color.get(color.reset),
+                    if (config.no_expand) " [noexpand]" else "",
+                    if (config.dry_run) " [dryrun]" else ""
+                });
 
-                for (r.cmds) |cmd| {
-                    const expanded = if (!config.no_expand) try expand_vars(cmd, rule, &vars) else cmd;
+                for (r.steps) |step| {
+                    switch (step) {
+                        .parallel => |enabled| {
+                            if (config.parallel and !enabled and batch.items.len > 0) {
+                                try threading.run_commands(batch.items, config);
+                                batch.clearRetainingCapacity();
+                            }
 
-                    const exit_code = execute_cmd(expanded, config.dry_run) catch |e| {
-                        logger.out_adv(.err, null, "execution failed: {s}", .{@errorName(e)});
-                        return e;
-                    };
+                            config.parallel = enabled;
+                        },
+                        .cmd => |cmd| {
+                            const expanded = if (!config.no_expand) try expand_vars(cmd, rule, &vars) else cmd;
 
-                    if (exit_code != 0) {
-                        logger.out_adv(.warning, null, "command exited with code {d}", .{exit_code});
+                            if (config.parallel)
+                                try batch.append(globals.init.arena.allocator(), expanded)
+                            else 
+                                try threading.run_commands(&.{expanded}, config);
+                        },
                     }
                 }
+
+                if (batch.items.len > 0) {
+                    try threading.run_commands(batch.items, config);
+                }
+
                 return;
             },
             else => {},
         }
     }
 
-    logger.out_adv(.err, null, "build rule '{s}' doesn't exist.", .{rule});
+    logger.out_adv(true, .err, null, "build rule '{s}' doesn't exist.", .{rule});
     return error.InvalidRule;
-}
-
-fn execute_cmd(cmd: []const u8, dry_run: bool) !u8 {
-    const args = if (builtin.target.os.tag == .windows)
-        [_][]const u8{ "cmd.exe", "/C", cmd }
-    else
-        [_][]const u8{ "sh", "-c", cmd };
-
-    logger.out("{s}", .{cmd});
-
-    if (dry_run)
-        return 0;
-
-    var child = try std.process.spawn(globals.init.io, .{.argv = args[0..], .stdin = .ignore, .stdout = .inherit, .stderr = .inherit});
-
-    const term = try child.wait(globals.init.io);
-
-    return switch (term) {
-        .exited => |code| code,
-        .signal => error.TerminateSignalReceived,
-        else => error.ExecutionError,
-    };
 }

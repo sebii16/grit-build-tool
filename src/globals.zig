@@ -3,14 +3,13 @@ const logger = @import("logger.zig");
 const builtin = @import("builtin");
 const os = @tagName(builtin.target.os.tag);
 const arch = @tagName(builtin.target.cpu.arch);
-const build_date = if (builtin.mode == .Debug) @embedFile("build_date.txt") else {};
 
 pub var init: std.process.Init = undefined;
 
-pub const default_build_file = "build.grit";
+pub const DEFAULT_BUILD_FILE = "build.grit";
 
 const ver =
-    "grit 0.4.7 (" ++ os ++ " " ++ arch ++ ")" ++ if (builtin.mode == .Debug) " [Debug build from " ++ build_date ++ "]" else "";
+    "grit 0.5.0 (" ++ os ++ " " ++ arch ++ ")" ++ if (builtin.mode == .Debug) " [Debug build]" else "";
 
 pub const ver_msg =
     ver ++
@@ -25,14 +24,17 @@ pub const help_msg =
     \\  grit [build flags]
     \\  grit [global flag]
     \\
-    \\If no rule is specified, grit will try to execute the default rule (marked with @default).
+    \\If no rule is specified, grit executes the default rule (marked with @default).
     \\
     \\Build flags:
-    \\  -d, --dry       Perform a "dry run": Print commands without executing them.
-    \\  --noexpand      Don't expand variables.
+    \\  -d, --dry       Print commands without executing them.
+    \\  --noexpand      Disable variable expansion.
+    \\  -f, --file      Specify the build file.
+    \\  -r, --rule      Specify the build rule.
+    \\  --ignore-errors Treat execution errors as warnings.
     \\
     \\Global flags: 
-    \\  -h, --help      Print this help message.
+    \\  -h, --help      Print help message.
     \\  -v, --version   Print version and license information.
-    \\  -l, --list      List all available build rules.
+    \\  -l, --list      List build rules.
     ;

@@ -16,25 +16,30 @@ pub const Config = struct {
     is_inited: bool = false,
 
     colors_enabled: bool = false,
-
-    build_file: []const u8 = "",
     default_level: LogLevel = .info,
+    build_file: []const u8 = "",
 };
 
-pub fn init(default_level: LogLevel) Config {
-    if (Config.current.is_inited) return Config.current;
+pub var stdout: std.Io.File.Writer = undefined;
+pub var stderr: std.Io.File.Writer = undefined;
+
+pub fn init() void {
+    if (Config.current.is_inited) return;
+
+    stdout = std.Io.File.stdout().writer(globals.init.io, &.{});
+    stderr = std.Io.File.stderr().writer(globals.init.io, &.{});
 
     const is_tty = std.Io.File.stdout().isTty(globals.init.io) catch false;
+    const is_dumb = globals.init.environ_map.get("DUMB");
 
     const ansi = if (is_tty and builtin.os.tag == .windows) br: {        
         std.Io.File.stdout().enableAnsiEscapeCodes(globals.init.io) catch {};
         break :br std.Io.File.stdout().supportsAnsiEscapeCodes(globals.init.io) catch false;
-    } else is_tty;
+    } else is_tty and (is_dumb == null or !std.mem.eql(u8, is_dumb.?, "dumb"));
 
-    return .{
+    Config.current = .{
         .is_inited = true,
         .colors_enabled = ansi,
-        .default_level = default_level 
     };
 }
 
@@ -50,17 +55,25 @@ pub const Colors = struct {
     }
 };
 
-pub fn out(comptime fmt: []const u8, args: anytype) void {
-    out_adv(Config.current.default_level, null, fmt, args);
+pub fn out(comptime level: LogLevel, comptime fmt: []const u8, args: anytype) void {
+    out_adv(true, level, null, fmt, args);
 }
 
-pub fn out_adv(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytype) void {
-    if (level == .debug and builtin.mode != .Debug) return;
+pub var log_mutex: std.Io.Mutex = .init;
+
+pub fn out_locked(comptime level: LogLevel, comptime fmt: []const u8, args: anytype) void {
+    log_mutex.lock(globals.init.io) catch return;
+    defer log_mutex.unlock(globals.init.io);
+    out(level, fmt, args);
+}
+
+pub fn out_adv(nl: bool, comptime level: LogLevel, line: ?usize, comptime fmt: []const u8, args: anytype) void {
+    if ((level == .debug and builtin.mode != .Debug) or !Config.current.is_inited) return;
 
     var sink = if (level == .err or level == .warning)
-        std.Io.File.stdout().writer(globals.init.io, &.{})
+        stderr
     else
-        std.Io.File.stderr().writer(globals.init.io, &.{});
+        stdout;
 
     const prefix = switch (level) {
         .info => "",
@@ -77,19 +90,28 @@ pub fn out_adv(level: LogLevel, line: ?usize, comptime fmt: []const u8, args: an
         .debug => Colors.get(Colors.magenta),
     };
 
-    var buf: [1024]u8 = undefined;
-    const w = if (line != null)
-        std.fmt.bufPrint(
-            &buf,
-            "{s}:{d}: {s}{s}{s}" ++ fmt ++ "\n",
-            .{ Config.current.build_file, line.?, color_code, prefix, Colors.get(Colors.reset) } ++ args,
+    if (line != null)
+        sink.interface.print(
+            "{s}:{d}: {s}{s}{s}" ++ fmt ++ "{s}",
+            .{
+                Config.current.build_file,
+                line.?,
+                color_code,
+                prefix,
+                Colors.get(Colors.reset) 
+            } ++ args ++ .{
+                if (nl) "\n" else "" 
+            },
         ) catch return
     else
-        std.fmt.bufPrint(
-            &buf,
-            "{s}{s}{s}" ++ fmt ++ "\n",
-            .{ color_code, prefix, Colors.get(Colors.reset) } ++ args,
+        sink.interface.print(
+            "{s}{s}{s}" ++ fmt ++ "{s}",
+            .{
+                color_code,
+                prefix,
+                Colors.get(Colors.reset)
+            } ++ args ++ .{
+                if (nl) "\n" else "" 
+            },
         ) catch return;
-
-    sink.interface.writeAll(w) catch {};
 }
